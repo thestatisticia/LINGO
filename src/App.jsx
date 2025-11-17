@@ -1258,7 +1258,11 @@ function App() {
   // Fetch transactions when wallet screen is opened or wallet address changes
   useEffect(() => {
     if (activeView === 'wallet' && wallet.address && !loadingTransactions) {
-      fetchTransactions()
+      try {
+        fetchTransactions()
+      } catch (error) {
+        console.error('Error in fetchTransactions useEffect:', error)
+      }
     }
   }, [activeView, wallet.address])
 
@@ -1267,8 +1271,12 @@ function App() {
     if (status === 'idle' && provider && wallet.address && activeView === 'wallet') {
       // Small delay to allow blockchain state to update
       const timer = setTimeout(() => {
-        fetchWalletBalance()
-        fetchTransactions()
+        try {
+          fetchWalletBalance()
+          fetchTransactions()
+        } catch (error) {
+          console.error('Error refreshing wallet data:', error)
+        }
       }, 2000)
       return () => clearTimeout(timer)
     }
@@ -1927,17 +1935,29 @@ function App() {
   }
 
   const fetchTransactions = async () => {
-    if (!wallet.address) return
+    if (!wallet.address) {
+      setTransactions([])
+      return
+    }
     setLoadingTransactions(true)
     try {
       // Fetch transactions for the connected wallet address (not contract)
-      const [txResponse, internalTxResponse] = await Promise.all([
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${wallet.address}&sort=desc&page=1&offset=20`),
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${wallet.address}&sort=desc&page=1&offset=20`)
-      ])
+      let txData = { status: '0', result: [] }
+      let internalTxData = { status: '0', result: [] }
       
-      const txData = await txResponse.json()
-      const internalTxData = await internalTxResponse.json()
+      try {
+        const txResponse = await fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${wallet.address}&sort=desc&page=1&offset=20`)
+        txData = await txResponse.json()
+      } catch (err) {
+        console.error('Error fetching txlist:', err)
+      }
+      
+      try {
+        const internalTxResponse = await fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${wallet.address}&sort=desc&page=1&offset=20`)
+        internalTxData = await internalTxResponse.json()
+      } catch (err) {
+        console.error('Error fetching txlistinternal:', err)
+      }
       
       // Create a map of internal transactions by hash
       const internalTxMap = new Map()
@@ -1978,31 +1998,45 @@ function App() {
           }
           
           // Start with the main transaction value
-          let actualValue = Number(formatEther(tx.value || '0'))
+          let actualValue = 0
+          try {
+            actualValue = Number(formatEther(tx.value || '0'))
+          } catch (e) {
+            console.warn('Error parsing tx.value:', e)
+            actualValue = 0
+          }
           
           // Check internal transactions for this hash
           const internalTxs = internalTxMap.get(tx.hash)
           if (internalTxs && internalTxs.length > 0) {
             internalTxs.forEach((itx) => {
-              const itxValue = Number(formatEther(itx.value || '0'))
-              const itxFrom = (itx.from || '').toLowerCase()
-              const itxTo = (itx.to || '').toLowerCase()
-              
-              // If wallet received CELO (from contract or other address)
-              if (itxTo === walletAddr && itxValue > 0) {
-                actualValue = Math.max(actualValue, itxValue)
-              }
-              // If wallet sent CELO
-              if (itxFrom === walletAddr && itxValue > 0) {
-                actualValue = Math.max(actualValue, itxValue)
+              try {
+                const itxValue = Number(formatEther(itx.value || '0'))
+                const itxFrom = (itx.from || '').toLowerCase()
+                const itxTo = (itx.to || '').toLowerCase()
+                
+                // If wallet received CELO (from contract or other address)
+                if (itxTo === walletAddr && itxValue > 0) {
+                  actualValue = Math.max(actualValue, itxValue)
+                }
+                // If wallet sent CELO
+                if (itxFrom === walletAddr && itxValue > 0) {
+                  actualValue = Math.max(actualValue, itxValue)
+                }
+              } catch (e) {
+                console.warn('Error processing internal tx:', e)
               }
             })
           }
           
           // Use main transaction value if available
           if (tx.value && tx.value !== '0') {
-            const mainTxValue = Number(formatEther(tx.value))
-            actualValue = Math.max(actualValue, mainTxValue)
+            try {
+              const mainTxValue = Number(formatEther(tx.value))
+              actualValue = Math.max(actualValue, mainTxValue)
+            } catch (e) {
+              console.warn('Error parsing main tx.value:', e)
+            }
           }
           
           return {
@@ -2036,7 +2070,7 @@ function App() {
   // Rewards are only recorded when user explicitly clicks "Claim" button
   // This prevents automatic MetaMask popups and unwanted 10 CELO additions
 
-  const walletLabel = isConnected
+  const walletLabel = isConnected && wallet.address
     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
     : 'Connect'
 
