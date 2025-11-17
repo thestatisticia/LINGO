@@ -1089,17 +1089,27 @@ function App() {
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
     
     // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
-    const miniPay = detectMiniPayProvider()
-    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
-    
+    // Use a longer delay to ensure all functions are defined
     let timer = null
-    if (miniPay && !wasDisconnected && !isConnected) {
-      // Small delay to ensure provider is fully ready
-      timer = setTimeout(() => {
-        connectWallet('minipay').catch((err) => {
-          console.log('Auto-connect skipped:', err.message)
-        })
-      }, 500)
+    try {
+      const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
+      if (!wasDisconnected && !isConnected) {
+        // Delay to ensure provider detection functions are ready
+        timer = setTimeout(() => {
+          try {
+            const miniPay = detectMiniPayProvider()
+            if (miniPay) {
+              connectWallet('minipay').catch((err) => {
+                console.log('Auto-connect skipped:', err?.message || err)
+              })
+            }
+          } catch (err) {
+            console.log('Auto-connect error:', err)
+          }
+        }, 1000)
+      }
+    } catch (err) {
+      console.log('Auto-connect setup error:', err)
     }
     
     return () => {
