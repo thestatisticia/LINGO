@@ -376,11 +376,7 @@ function App() {
   const claimableBalance = rewardContract && VAULT_ADDRESS && claimableOnChain > 0
     ? claimableOnChain + pendingRewardTotal
     : (rewardPreview > 0 ? rewardPreview : pendingRewardTotal)
-  const heroContent = HERO_COPY[activeView] || HERO_COPY.home || {
-    eyebrow: 'Mini-Lingua',
-    title: 'Incentivized language learning.',
-    subtitle: 'Earn XP, CELO rewards, and NFTs as you master new languages.'
-  }
+  const heroContent = HERO_COPY[activeView] ?? HERO_COPY.home
 
   const showToast = (message) => {
     setToast(message)
@@ -996,76 +992,34 @@ function App() {
   }
 
   const renderLanding = () => {
-    try {
-      const landingCopy = HERO_COPY.home || {
-        eyebrow: 'Mini-Lingua',
-        title: 'Incentivized language learning.',
-        subtitle: 'Earn XP, CELO rewards, and NFTs as you master new languages.'
-      }
-      const titleText = landingCopy.title || 'Incentivized language learning.'
-      return (
-        <section className="single-screen-card landing-card">
-          <div className="landing-content">
-            <p className="eyebrow">{landingCopy.eyebrow || 'Mini-Lingua'}</p>
-            <h1>
-              {titleText.split(' ').map((word, idx) => {
-                const cleanWord = word.replace(/[.,]/g, '')
-                const isEmphasized = cleanWord === 'quests' || cleanWord === 'loot'
-                const displayWord = word
-                return isEmphasized ? <em key={idx}>{displayWord} </em> : <span key={idx}>{displayWord} </span>
-              })}
-            </h1>
-            <p className="landing-note">{landingCopy.subtitle || 'Earn XP, CELO rewards, and NFTs as you master new languages.'}</p>
-          </div>
-          <div className="landing-actions">
-            <button
-              type="button"
-              className="wallet-button big"
-              onClick={() => {
-                try {
-                  connectWallet('auto')
-                } catch (err) {
-                  console.error('Error connecting wallet:', err)
-                }
-              }}
-              disabled={status === 'connecting'}
-            >
-              {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
-            </button>
-            {toast && <div className="toast inline">{toast}</div>}
-          </div>
-        </section>
-      )
-    } catch (error) {
-      console.error('Error rendering landing page:', error)
-      // Fallback minimal landing page
-      return (
-        <section className="single-screen-card landing-card">
-          <div className="landing-content">
-            <p className="eyebrow">Mini-Lingua</p>
-            <h1>Incentivized language learning</h1>
-            <p className="landing-note">Earn XP, CELO rewards, and NFTs as you master new languages.</p>
-          </div>
-          <div className="landing-actions">
-            <button
-              type="button"
-              className="wallet-button big"
-              onClick={() => {
-                try {
-                  if (typeof connectWallet === 'function') {
-                    connectWallet('auto')
-                  }
-                } catch (err) {
-                  console.error('Error connecting wallet:', err)
-                }
-              }}
-            >
-              Connect wallet
-            </button>
-          </div>
-        </section>
-      )
-    }
+    const landingCopy = HERO_COPY.home
+    return (
+      <section className="single-screen-card landing-card">
+        <div className="landing-content">
+          <p className="eyebrow">{landingCopy.eyebrow}</p>
+          <h1>
+            {landingCopy.title.split(' ').map((word, idx) => {
+              const cleanWord = word.replace(/[.,]/g, '')
+              const isEmphasized = cleanWord === 'quests' || cleanWord === 'loot'
+              const displayWord = word
+              return isEmphasized ? <em key={idx}>{displayWord} </em> : <span key={idx}>{displayWord} </span>
+            })}
+          </h1>
+          <p className="landing-note">{landingCopy.subtitle}</p>
+        </div>
+        <div className="landing-actions">
+          <button
+            type="button"
+            className="wallet-button big"
+            onClick={() => connectWallet('auto')}
+            disabled={status === 'connecting'}
+          >
+            {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
+          </button>
+          {toast && <div className="toast inline">{toast}</div>}
+        </div>
+      </section>
+    )
   }
 
   const renderDock = () => (
@@ -1308,54 +1262,6 @@ function App() {
       return () => clearTimeout(timer)
     }
   }, [status, provider, wallet.address, activeView])
-
-  // Auto-connect to MiniPay after all functions are defined
-  useEffect(() => {
-    // Only run once on mount and if not already connected
-    if (isConnected) {
-      return
-    }
-    
-    // Wait longer to ensure React and all components are fully initialized
-    const timer = setTimeout(() => {
-      try {
-        // Check if functions exist before calling
-        if (typeof detectMiniPayProvider === 'function' && typeof connectWallet === 'function') {
-          try {
-            const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
-            if (wasDisconnected) {
-              return
-            }
-          } catch (e) {
-            // If sessionStorage fails, just skip auto-connect
-            console.warn('Could not check disconnect status:', e)
-            return
-          }
-          
-          const miniPay = detectMiniPayProvider()
-          if (miniPay && typeof miniPay.request === 'function') {
-            // Use a small delay before connecting to ensure everything is ready
-            setTimeout(() => {
-              connectWallet('minipay').catch((err) => {
-                // Silently handle - don't show error to user
-                console.log('Auto-connect skipped:', err?.message || err)
-              })
-            }, 500)
-          }
-        }
-      } catch (err) {
-        // Silently handle errors - don't crash the app
-        console.log('Auto-connect error (non-critical):', err)
-      }
-    }, 3000) // Increased delay to ensure everything is ready
-    
-    return () => {
-      if (timer) {
-        clearTimeout(timer)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const detectMiniPayProvider = () => {
     try {
@@ -2149,6 +2055,30 @@ function App() {
     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
     : 'Connect'
 
+  // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
+  // This must be AFTER all function definitions
+  useEffect(() => {
+    const miniPay = detectMiniPayProvider()
+    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
+    
+    let timer = null
+    if (miniPay && !wasDisconnected && !isConnected) {
+      // Small delay to ensure provider is fully ready
+      timer = setTimeout(() => {
+        connectWallet('minipay').catch((err) => {
+          console.log('Auto-connect skipped:', err.message)
+        })
+      }, 500)
+    }
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const renderHero = () => (
     <header className="hero">
       <div>
@@ -2159,58 +2089,29 @@ function App() {
     </header>
   )
 
-  // Ensure we always render something, even if there's an error
-  let shell = null
-  try {
-    shell = (
-      <div className="app-shell">
-        {isConnected && renderHero()}
+  const shell = (
+    <div className="app-shell">
+      {isConnected && renderHero()}
 
-        <main className="screen-stage">
-          {isConnected ? (
-            <>
-              {activeView === 'home' && renderHome()}
-              {activeView === 'learn' && renderLearn()}
-              {activeView === 'rewards' && renderRewards()}
-              {activeView === 'leaderboard' && renderLeaderboard()}
-              {activeView === 'wallet' && renderWallet()}
-            </>
-          ) : (
-            renderLanding()
-          )}
-        </main>
+      <main className="screen-stage">
+        {isConnected ? (
+          <>
+            {activeView === 'home' && renderHome()}
+            {activeView === 'learn' && renderLearn()}
+            {activeView === 'rewards' && renderRewards()}
+            {activeView === 'leaderboard' && renderLeaderboard()}
+            {activeView === 'wallet' && renderWallet()}
+          </>
+        ) : (
+          renderLanding()
+        )}
+      </main>
 
-        {isConnected && renderDock()}
+      {isConnected && renderDock()}
 
-        {toast && isConnected && <div className="toast floating">{toast}</div>}
-      </div>
-    )
-  } catch (error) {
-    console.error('Render error:', error)
-    // Fallback render if main render fails
-    shell = (
-      <div className="app-shell">
-        <main className="screen-stage">
-          <section className="single-screen-card landing-card">
-            <div className="landing-content">
-              <p className="eyebrow">Error</p>
-              <h1>Something went wrong</h1>
-              <p className="landing-note">Please refresh the page or try again later.</p>
-            </div>
-            <div className="landing-actions">
-              <button
-                type="button"
-                className="wallet-button big"
-                onClick={() => window.location.reload()}
-              >
-                Refresh Page
-              </button>
-            </div>
-          </section>
-        </main>
-      </div>
-    )
-  }
+      {toast && isConnected && <div className="toast floating">{toast}</div>}
+    </div>
+  )
 
   return <div className="app-viewport">{shell}</div>
 }
