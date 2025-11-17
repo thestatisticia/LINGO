@@ -125,8 +125,71 @@
 .landing-card {
   text-align: center;
   align-items: center;
-  background: radial-gradient(circle at top, rgba(0, 224, 255, 0.18), transparent),
-    rgba(9, 7, 15, 0.95);
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, 
+    rgba(255, 100, 50, 0.15) 0%,
+    rgba(124, 77, 255, 0.2) 50%,
+    rgba(6, 8, 24, 0.95) 100%),
+    radial-gradient(circle at 20% 30%, rgba(0, 224, 255, 0.2), transparent 60%),
+    radial-gradient(circle at 80% 70%, rgba(124, 77, 255, 0.25), transparent 60%);
+  min-height: 75vh;
+  gap: 2rem;
+  padding: 3rem 2rem 2rem;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.landing-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.03) 20%, transparent 40%),
+    linear-gradient(90deg, transparent 60%, rgba(0, 224, 255, 0.05) 80%, transparent 100%);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.landing-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(to top, 
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 30%,
+    transparent 100%);
+  pointer-events: none;
+  border-radius: 0 0 26px 26px;
+}
+
+.landing-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  justify-content: center;
+}
+
+.landing-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  z-index: 2;
+  width: 100%;
 }
 
 .landing-badge {
@@ -143,20 +206,92 @@
 }
 
 .landing-card h1 {
-  margin: 0;
-  font-size: 2.1rem;
+  margin: 0.8rem 0;
+  font-size: clamp(2.2rem, 5vw, 3rem);
+  font-weight: 700;
   color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-shadow: 0 4px 30px rgba(0, 224, 255, 0.3),
+    0 2px 10px rgba(124, 77, 255, 0.2);
+  position: relative;
+  z-index: 1;
+}
+
+.landing-card h1 em {
+  font-style: italic;
+  font-weight: 800;
+  background: linear-gradient(135deg, #00e0ff, #7c4dff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .landing-note {
-  margin: 0;
-  color: var(--text-muted);
+  margin: 0.5rem 0 2rem;
+  color: rgba(214, 224, 255, 0.9);
+  line-height: 1.6;
+  font-size: 1.05rem;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 .wallet-button.big {
   width: 100%;
+  max-width: 320px;
   justify-content: center;
-  padding: 0.95rem 1.6rem;
+  padding: 1.2rem 2.2rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: 14px;
+  color: #ffffff;
+  background: rgba(20, 20, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 224, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: auto;
+  margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 2;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wallet-button.big::after {
+  content: '→';
+  font-size: 1.2rem;
+  opacity: 0.9;
+  transition: transform 250ms ease;
+}
+
+.wallet-button.big:disabled::after {
+  content: '';
+}
+
+.wallet-button.big:hover {
+  transform: translateY(-2px);
+  background: rgba(25, 25, 35, 0.98);
+  border-color: rgba(0, 224, 255, 0.4);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5),
+    0 6px 20px rgba(0, 224, 255, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.wallet-button.big:hover::after {
+  transform: translateX(4px);
+}
+
+.wallet-button.big:active {
+  transform: translateY(0);
 }
 
 .single-panel {
@@ -256,7 +391,7 @@
 }
 
 .home-screen {
-  min-height: 640px;
+  min-height: 75vh;
   justify-content: space-between;
   padding: 1.6rem;
 }
@@ -566,6 +701,17 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   margin: 0;
+}
+
+.landing-card .eyebrow {
+  color: rgba(0, 224, 255, 0.95);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 15px rgba(0, 224, 255, 0.4);
 }
 
 .module-note {
