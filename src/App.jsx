@@ -456,54 +456,96 @@ function App() {
   const getLevelLabel = (id) => LEVELS.find((entry) => entry.id === id)?.label ?? id
   const renderHome = () => (
     <section className="single-screen-card home-screen">
-      <div>
-        <p className="eyebrow">Current module</p>
-        <h2>{lesson?.title ?? 'Module selected'}</h2>
-        <p className="muted-line">
-          {getLevelLabel(lesson?.level ?? selectedLevel)} · {lesson?.questions.length ?? 10} questions · Earn up to{' '}
-          {formatCelo(LESSON_REWARD_CAP)} CELO + XP
+      <div style={{ marginBottom: '1.5rem' }}>
+        <p className="eyebrow" style={{ marginBottom: '0.5rem' }}>Ready to learn?</p>
+        <h2 style={{ marginBottom: '0.6rem', fontSize: '1.8rem', lineHeight: '1.3' }}>
+          {lesson?.title ?? 'Select a module'}
+        </h2>
+        <p className="muted-line" style={{ fontSize: '0.9rem', lineHeight: '1.5' }}>
+          <span style={{ color: 'rgba(0, 224, 255, 0.9)' }}>{getLevelLabel(lesson?.level ?? selectedLevel)}</span>
+          {' · '}
+          {lesson?.questions.length ?? 10} questions
+          {' · '}
+          <span style={{ color: 'rgba(0, 196, 140, 0.9)' }}>Up to {formatCelo(LESSON_REWARD_CAP)} reward</span>
         </p>
       </div>
 
-      <div className="pill-row">
-        <div className="pill">
-          <strong>{xp}</strong>
-          <span>XP</span>
+      <div className="pill-row" style={{ marginBottom: '1.5rem' }}>
+        <div className="pill" style={{ background: 'rgba(0, 224, 255, 0.1)', borderColor: 'rgba(0, 224, 255, 0.3)' }}>
+          <strong style={{ color: '#00e0ff', fontSize: '1.4rem' }}>{xp}</strong>
+          <span style={{ color: 'rgba(0, 224, 255, 0.8)' }}>Total XP</span>
         </div>
-        <div className="pill">
-          <strong>{streak}</strong>
-          <span>day streak</span>
+        <div className="pill" style={{ background: 'rgba(255, 100, 50, 0.1)', borderColor: 'rgba(255, 100, 50, 0.3)' }}>
+          <strong style={{ color: '#ff6432', fontSize: '1.4rem' }}>{streak}</strong>
+          <span style={{ color: 'rgba(255, 100, 50, 0.8)' }}>Day streak</span>
         </div>
-        <div className="pill">
-          <strong>{userLevel}</strong>
-          <span>level</span>
-        </div>
-      </div>
-
-      <div className="mini-progress-block">
-        <div>
-          <p className="eyebrow">Weekly unlock</p>
-          <div className="mini-progress">
-            <span style={{ width: `${weeklyCompletion}%` }} />
-          </div>
-          <small>{weeklyCompletion}% of this week unlocked</small>
-        </div>
-        <div>
-          <p className="eyebrow">Loot</p>
-          <small>{lootDrop || 'Complete lessons to earn XP, CELO, and NFTs.'}</small>
+        <div className="pill" style={{ background: 'rgba(124, 77, 255, 0.1)', borderColor: 'rgba(124, 77, 255, 0.3)' }}>
+          <strong style={{ color: '#7c4dff', fontSize: '1.4rem' }}>{userLevel}</strong>
+          <span style={{ color: 'rgba(124, 77, 255, 0.8)' }}>Level</span>
         </div>
       </div>
 
-          <div className="home-actions">
-            <button className="primary" type="button" onClick={() => switchView('learn')}>
-          Start learning
-            </button>
-            <button className="ghost" type="button" onClick={() => switchView('rewards')}>
-          View rewards
-            </button>
+      <div className="mini-progress-block" style={{ marginBottom: '1.5rem' }}>
+        <div style={{ 
+          background: 'rgba(0, 224, 255, 0.05)', 
+          border: '1px solid rgba(0, 224, 255, 0.2)', 
+          borderRadius: '12px', 
+          padding: '1rem' 
+        }}>
+          <p className="eyebrow" style={{ marginBottom: '0.6rem', color: 'rgba(0, 224, 255, 0.9)' }}>
+            Weekly Progress
+          </p>
+          <div className="mini-progress" style={{ marginBottom: '0.4rem' }}>
+            <span style={{ width: `${weeklyCompletion}%`, background: 'linear-gradient(90deg, #00e0ff, #7c4dff)' }} />
           </div>
-      </section>
-    )
+          <small style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+            {weeklyCompletion}% complete this week
+          </small>
+        </div>
+        <div style={{ 
+          background: 'rgba(124, 77, 255, 0.05)', 
+          border: '1px solid rgba(124, 77, 255, 0.2)', 
+          borderRadius: '12px', 
+          padding: '1rem' 
+        }}>
+          <p className="eyebrow" style={{ marginBottom: '0.4rem', color: 'rgba(124, 77, 255, 0.9)' }}>
+            Rewards
+          </p>
+          <small style={{ color: 'rgba(255, 255, 255, 0.8)', lineHeight: '1.5' }}>
+            {lootDrop || 'Complete lessons to unlock CELO rewards and exclusive NFTs.'}
+          </small>
+        </div>
+      </div>
+
+      <div className="home-actions" style={{ marginTop: 'auto', gap: '0.75rem' }}>
+        <button 
+          className="primary" 
+          type="button" 
+          onClick={() => switchView('learn')}
+          style={{ 
+            width: '100%', 
+            padding: '1rem 1.5rem',
+            fontSize: '1rem',
+            fontWeight: '600'
+          }}
+        >
+          Start Learning →
+        </button>
+        <button 
+          className="ghost" 
+          type="button" 
+          onClick={() => switchView('rewards')}
+          style={{ 
+            width: '100%', 
+            padding: '0.85rem 1.5rem',
+            fontSize: '0.9rem'
+          }}
+        >
+          View Rewards
+        </button>
+      </div>
+    </section>
+  )
 
   const renderLearn = () => {
     const moduleIsCompleted = isModuleCompleted(lesson?.id)
@@ -871,7 +913,7 @@ function App() {
               className="secondary"
               type="button"
               onClick={fetchTransactions}
-              disabled={loadingTransactions || !VAULT_ADDRESS}
+              disabled={loadingTransactions || !wallet.address}
             >
               {loadingTransactions ? 'Loading...' : 'Refresh History'}
             </button>
@@ -937,22 +979,25 @@ function App() {
                     </p>
                     <p style={{ margin: '0.3rem 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {tx.type === 'sent' 
-                        ? `Contract → ${formatAddress(tx.to)}` 
+                        ? `To: ${formatAddress(tx.to)}` 
                         : tx.type === 'received'
-                        ? `${formatAddress(tx.from)} → Contract`
+                        ? `From: ${formatAddress(tx.from)}`
                         : `${formatAddress(tx.from)} → ${formatAddress(tx.to)}`}
-                      {tx.involvesUserWallet && (
-                        <span style={{ 
-                          display: 'inline-block', 
-                          marginLeft: '0.5rem',
-                          padding: '0.2rem 0.4rem',
-                          borderRadius: '4px',
-                          background: 'rgba(0, 224, 255, 0.2)',
-                          color: '#c5f3ff',
-                          fontSize: '0.7rem'
-                        }}>
-                          Your wallet
-                        </span>
+                      {VAULT_ADDRESS && (
+                        (tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase() || 
+                         tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()) && (
+                          <span style={{ 
+                            display: 'inline-block', 
+                            marginLeft: '0.5rem',
+                            padding: '0.2rem 0.4rem',
+                            borderRadius: '4px',
+                            background: 'rgba(0, 224, 255, 0.2)',
+                            color: '#c5f3ff',
+                            fontSize: '0.7rem'
+                          }}>
+                            Contract
+                          </span>
+                        )
                       )}
                     </p>
                     <a
@@ -978,9 +1023,9 @@ function App() {
             </div>
           ) : (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
-              {VAULT_ADDRESS 
-                ? 'No contract transactions found. Complete lessons and claim rewards to see transaction history.'
-                : 'Contract address not configured.'}
+              {wallet.address 
+                ? 'No transactions found. Complete lessons and claim rewards to see your transaction history.'
+                : 'Connect your wallet to view transaction history.'}
             </p>
           )}
         </div>
@@ -1233,6 +1278,7 @@ function App() {
       fetchWalletBalance()
     } else {
       setWalletBalance(0)
+      setTransactions([]) // Clear transactions when wallet disconnects
     }
   }, [provider, wallet.address])
 
@@ -1251,12 +1297,12 @@ function App() {
     return () => clearInterval(interval)
   }, [activeView, provider, wallet.address])
 
-  // Fetch transactions when wallet screen is opened
+  // Fetch transactions when wallet screen is opened or wallet address changes
   useEffect(() => {
-    if (activeView === 'wallet' && VAULT_ADDRESS && !loadingTransactions) {
+    if (activeView === 'wallet' && wallet.address && !loadingTransactions) {
       fetchTransactions()
     }
-  }, [activeView, VAULT_ADDRESS])
+  }, [activeView, wallet.address])
 
   // Refresh wallet balance after successful claim
   useEffect(() => {
@@ -1764,15 +1810,41 @@ function App() {
       
       // If contract has less than claimable, claim only what's available
       let tx
+      // MiniPay may need different gas handling - try without explicit gasLimit first
+      const isMiniPay = wallet.type === 'MiniPay'
+      const txOptions = isMiniPay 
+        ? {} // Let MiniPay handle gas estimation
+        : { gasLimit: 150000 } // Explicit gas for MetaMask
+      
       if (contractBalanceCELO >= currentClaimable) {
         // Contract has enough - claim all
         console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
-        tx = await contract.claimAll({ gasLimit: 150000 })
+        try {
+          tx = await contract.claimAll(txOptions)
+        } catch (error) {
+          // If it fails, try with gas limit for MiniPay
+          if (isMiniPay && error.message?.includes('gas')) {
+            console.log('Retrying with gas limit for MiniPay...')
+            tx = await contract.claimAll({ gasLimit: 150000 })
+          } else {
+            throw error
+          }
+        }
       } else {
         // Contract doesn't have enough - claim only what's available
         const amountWei = parseEther(claimableAmount.toFixed(6))
         console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
-        tx = await contract.claim(amountWei, { gasLimit: 150000 })
+        try {
+          tx = await contract.claim(amountWei, txOptions)
+        } catch (error) {
+          // If it fails, try with gas limit for MiniPay
+          if (isMiniPay && error.message?.includes('gas')) {
+            console.log('Retrying with gas limit for MiniPay...')
+            tx = await contract.claim(amountWei, { gasLimit: 150000 })
+          } else {
+            throw error
+          }
+        }
       }
       console.log('Claim transaction sent:', tx.hash)
       
@@ -1897,19 +1969,17 @@ function App() {
   }
 
   const fetchTransactions = async () => {
-    if (!VAULT_ADDRESS) return
+    if (!wallet.address) return
     setLoadingTransactions(true)
     try {
-      // Fetch regular transactions, internal transactions, and token transfers
-      const [txResponse, internalTxResponse, tokenTxResponse] = await Promise.all([
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`)
+      // Fetch transactions for the connected wallet address (not contract)
+      const [txResponse, internalTxResponse] = await Promise.all([
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${wallet.address}&sort=desc&page=1&offset=20`),
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${wallet.address}&sort=desc&page=1&offset=20`)
       ])
       
       const txData = await txResponse.json()
       const internalTxData = await internalTxResponse.json()
-      const tokenTxData = await tokenTxResponse.json()
       
       // Create a map of internal transactions by hash
       const internalTxMap = new Map()
@@ -1925,49 +1995,29 @@ function App() {
         })
       }
       
-      // Create a map of token transfers (CELO native transfers) by hash
-      const tokenTxMap = new Map()
-      if (tokenTxData.status === '1' && tokenTxData.result && Array.isArray(tokenTxData.result)) {
-        tokenTxData.result.forEach((tokenTx) => {
-          const hash = tokenTx.hash || tokenTx.transactionHash
-          if (hash) {
-            if (!tokenTxMap.has(hash)) {
-              tokenTxMap.set(hash, [])
-            }
-            tokenTxMap.get(hash).push(tokenTx)
-          }
-        })
-      }
-      
       if (txData.status === '1' && txData.result && Array.isArray(txData.result)) {
-        // Fetch transaction details in parallel for transactions with zero value
-        const txHashesWithZeroValue = txData.result
-          .filter(tx => !tx.value || tx.value === '0')
-          .map(tx => tx.hash)
-          .slice(0, 10) // Limit to 10 to avoid too many requests
-        
-        const txDetailPromises = txHashesWithZeroValue.map(hash =>
-          fetch(`https://celo-sepolia.blockscout.com/api?module=proxy&action=eth_getTransactionByHash&txhash=${hash}`)
-            .then(r => r.json())
-            .then(data => ({ hash, data }))
-            .catch(() => ({ hash, data: null }))
-        )
-        
-        const txDetails = await Promise.all(txDetailPromises)
-        const txDetailMap = new Map()
-        txDetails.forEach(({ hash, data }) => {
-          if (data && data.result) {
-            txDetailMap.set(hash, data.result)
-          }
-        })
+        const walletAddr = wallet.address.toLowerCase()
+        const contractAddr = VAULT_ADDRESS?.toLowerCase() || ''
         
         const formattedTxs = txData.result.map((tx) => {
-          const isToContract = tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
-          const isFromContract = tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
-          const involvesUserWallet = wallet.address && (
-            tx.from?.toLowerCase() === wallet.address.toLowerCase() || 
-            tx.to?.toLowerCase() === wallet.address.toLowerCase()
-          )
+          const txFrom = (tx.from || '').toLowerCase()
+          const txTo = (tx.to || '').toLowerCase()
+          const isFromWallet = txFrom === walletAddr
+          const isToWallet = txTo === walletAddr
+          const isToContract = contractAddr && txTo === contractAddr
+          const isFromContract = contractAddr && txFrom === contractAddr
+          
+          // Determine transaction type from wallet's perspective
+          let txType = 'unknown'
+          if (isFromWallet && isToContract) {
+            txType = 'sent' // Wallet sent to contract (funding or interaction)
+          } else if (isFromContract && isToWallet) {
+            txType = 'received' // Contract sent to wallet (claim)
+          } else if (isFromWallet) {
+            txType = 'sent' // Wallet sent to another address
+          } else if (isToWallet) {
+            txType = 'received' // Wallet received from another address
+          }
           
           // Start with the main transaction value
           let actualValue = Number(formatEther(tx.value || '0'))
@@ -1979,26 +2029,16 @@ function App() {
               const itxValue = Number(formatEther(itx.value || '0'))
               const itxFrom = (itx.from || '').toLowerCase()
               const itxTo = (itx.to || '').toLowerCase()
-              const contractAddr = VAULT_ADDRESS.toLowerCase()
               
-              // Contract sending CELO (claim)
-              if (itxFrom === contractAddr && itxValue > 0) {
+              // If wallet received CELO (from contract or other address)
+              if (itxTo === walletAddr && itxValue > 0) {
                 actualValue = Math.max(actualValue, itxValue)
               }
-              // Contract receiving CELO (funding)
-              if (itxTo === contractAddr && itxValue > 0) {
+              // If wallet sent CELO
+              if (itxFrom === walletAddr && itxValue > 0) {
                 actualValue = Math.max(actualValue, itxValue)
               }
             })
-          }
-          
-          // Check transaction detail if we fetched it
-          const txDetail = txDetailMap.get(tx.hash)
-          if (txDetail && txDetail.value) {
-            const detailValue = Number(formatEther(txDetail.value))
-            if (detailValue > 0) {
-              actualValue = Math.max(actualValue, detailValue)
-            }
           }
           
           // Use main transaction value if available
@@ -2014,8 +2054,8 @@ function App() {
             value: actualValue,
             timestamp: parseInt(tx.timeStamp || '0', 10) * 1000,
             status: tx.txreceipt_status === '1' ? 'success' : 'failed',
-            type: isToContract ? 'received' : isFromContract ? 'sent' : 'unknown',
-            involvesUserWallet,
+            type: txType,
+            involvesUserWallet: true, // All transactions are for this wallet
           }
         })
         
