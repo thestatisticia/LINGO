@@ -1088,40 +1088,11 @@ function App() {
     window.addEventListener('error', handleError, true)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
     
-    // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
-    // Use a longer delay to ensure all functions are defined
-    let timer = null
-    try {
-      const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
-      if (!wasDisconnected && !isConnected) {
-        // Delay to ensure provider detection functions are ready
-        timer = setTimeout(() => {
-          try {
-            const miniPay = detectMiniPayProvider()
-            if (miniPay) {
-              connectWallet('minipay').catch((err) => {
-                console.log('Auto-connect skipped:', err?.message || err)
-              })
-            }
-          } catch (err) {
-            console.log('Auto-connect error:', err)
-          }
-        }, 1000)
-      }
-    } catch (err) {
-      console.log('Auto-connect setup error:', err)
-    }
-    
     return () => {
       // Clean up error handlers
       window.removeEventListener('error', handleError, true)
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
-      // Clean up auto-connect timer
-      if (timer) {
-        clearTimeout(timer)
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1292,9 +1263,54 @@ function App() {
     }
   }, [status, provider, wallet.address, activeView])
 
+  // Auto-connect to MiniPay after all functions are defined
+  useEffect(() => {
+    // Only run once on mount and if not already connected
+    if (isConnected) {
+      return
+    }
+    
+    try {
+      const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
+      if (wasDisconnected) {
+        return
+      }
+    } catch (e) {
+      // If sessionStorage fails, just skip auto-connect
+      console.warn('Could not check disconnect status:', e)
+      return
+    }
+    
+    // Delay to ensure MiniPay provider is fully ready and all functions are defined
+    const timer = setTimeout(() => {
+      try {
+        // Check if functions exist before calling
+        if (typeof detectMiniPayProvider === 'function' && typeof connectWallet === 'function') {
+          const miniPay = detectMiniPayProvider()
+          if (miniPay && typeof miniPay.request === 'function') {
+            connectWallet('minipay').catch((err) => {
+              // Silently handle - don't show error to user
+              console.log('Auto-connect skipped:', err?.message || err)
+            })
+          }
+        }
+      } catch (err) {
+        // Silently handle errors - don't crash the app
+        console.log('Auto-connect error (non-critical):', err)
+      }
+    }, 2000)
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const detectMiniPayProvider = () => {
     try {
+      if (typeof window === 'undefined') return null
       const global = window
       if (!global) return null
       if (global.miniPay) return global.miniPay
