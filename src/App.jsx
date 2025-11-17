@@ -19,23 +19,23 @@ const formatCelo = (value = 0) => `${value.toFixed(2)} CELO`
 const HERO_COPY = {
   home: {
     eyebrow: 'Mini-Lingua',
-    title: 'Daily quests. Instant loot.',
-    subtitle: 'Micro lessons with XP boosts and CELO drops. Learn fast, stay on-chain.',
+    title: 'Incentivized language learning.',
+    subtitle: 'Earn XP, CELO rewards, and NFTs as you master new languages. Learn, earn, level up.',
   },
   learn: {
-    eyebrow: 'Lesson sprint',
-    title: 'Ten taps per module.',
-    subtitle: 'Swap language, lock a level, and clear the deck to keep the streak alive.',
+    eyebrow: 'Learn & earn',
+    title: 'Complete modules. Earn rewards.',
+    subtitle: 'Answer questions, gain XP, unlock CELO payouts and exclusive NFTs. Your progress, your rewards.',
   },
   rewards: {
-    eyebrow: 'Vault',
-    title: 'Claim & boost.',
-    subtitle: 'Convert XP to capped CELO payouts and hit live quests for extras.',
+    eyebrow: 'Rewards vault',
+    title: 'Claim your earnings.',
+    subtitle: 'Convert XP to CELO rewards. Collect NFTs for milestones. Your incentivized learning journey pays off.',
   },
   leaderboard: {
-    eyebrow: 'Leaders',
-    title: 'Top streaks this week.',
-    subtitle: 'Ten spots. Highest XP wins the drop.',
+    eyebrow: 'Top learners',
+    title: 'Weekly champions.',
+    subtitle: 'Compete for top spots. Highest XP earns exclusive rewards and NFT drops.',
   },
 }
 
@@ -67,6 +67,7 @@ const SCREEN_TABS = [
   { id: 'learn', label: 'Lessons', Icon: BookIcon },
   { id: 'rewards', label: 'Vault', Icon: VaultIcon },
   { id: 'leaderboard', label: 'Board', Icon: TrophyIcon },
+  { id: 'wallet', label: 'Wallet', Icon: WalletIcon },
 ]
 
 function HomeIcon() {
@@ -161,6 +162,39 @@ function TrophyIcon() {
   )
 }
 
+function WalletIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="3"
+        y="5"
+        width="18"
+        height="14"
+        rx="2"
+        ry="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M3 9h18"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle
+        cx="17"
+        cy="13"
+        r="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+    </svg>
+  )
+}
+
 function App() {
   const initialModule =
     MODULES_DATA.find(
@@ -172,9 +206,39 @@ function App() {
   const [selectedLessonId, setSelectedLessonId] = useState(initialModule.id)
   const [questionIndex, setQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState([])
-  const [xp, setXp] = useState(135)
-  const [streak, setStreak] = useState(3)
-  const [weeklyCompletion, setWeeklyCompletion] = useState(45)
+  // Helper functions for wallet-specific stats (defined before state so they can be used in useState)
+  const getWalletStats = (walletAddress) => {
+    if (!walletAddress) return { xp: 0, streak: 0, weeklyCompletion: 0 }
+    try {
+      const key = `wallet_stats_${walletAddress.toLowerCase()}`
+      const stored = localStorage.getItem(key)
+      if (stored) {
+        const stats = JSON.parse(stored)
+        return { xp: stats.xp || 0, streak: stats.streak || 0, weeklyCompletion: stats.weeklyCompletion || 0 }
+      }
+    } catch (err) {
+      console.error('Failed to load wallet stats:', err)
+    }
+    return { xp: 0, streak: 0, weeklyCompletion: 0 }
+  }
+
+  const saveWalletStats = (newXp, newStreak, newWeeklyCompletion) => {
+    if (!wallet.address) return
+    try {
+      const key = `wallet_stats_${wallet.address.toLowerCase()}`
+      localStorage.setItem(key, JSON.stringify({
+        xp: newXp,
+        streak: newStreak,
+        weeklyCompletion: newWeeklyCompletion
+      }))
+    } catch (err) {
+      console.error('Failed to save wallet stats:', err)
+    }
+  }
+
+  const [xp, setXp] = useState(0)
+  const [streak, setStreak] = useState(0)
+  const [weeklyCompletion, setWeeklyCompletion] = useState(0)
   const [lootDrop, setLootDrop] = useState('')
   const [wallet, setWallet] = useState({ address: '', type: '', chainId: '' })
   const [provider, setProvider] = useState(null)
@@ -185,13 +249,87 @@ function App() {
   const [moduleSessionXp, setModuleSessionXp] = useState(0)
   const [leaderboards, setLeaderboards] = useState(() => buildDefaultLeaderboards())
   const [lastRunXp, setLastRunXp] = useState(0)
+  const [pendingModuleCompletion, setPendingModuleCompletion] = useState(false)
   const [activeView, setActiveView] = useState('home')
   const [resetCountdown, setResetCountdown] = useState('')
   const [practiceMode, setPracticeMode] = useState(false)
   const [weekBucket, setWeekBucket] = useState(() => getWeekBucket())
   const [rewardContract, setRewardContract] = useState(null)
   const [claimableOnChain, setClaimableOnChain] = useState(0)
+  const [reviewMode, setReviewMode] = useState(false)
+  const [walletBalance, setWalletBalance] = useState(0)
+  const [transactions, setTransactions] = useState([])
+  const [loadingTransactions, setLoadingTransactions] = useState(false)
   const isConnected = Boolean(wallet.address)
+
+  // Store pending rewards in localStorage (per wallet)
+  const getPendingRewards = () => {
+    if (!wallet.address) return []
+    try {
+      const key = `pending_rewards_${wallet.address.toLowerCase()}`
+      const stored = localStorage.getItem(key)
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  }
+
+  const addPendingReward = (xpEarned, moduleId, isModuleComplete) => {
+    if (!wallet.address || practiceMode) return
+    try {
+      const key = `pending_rewards_${wallet.address.toLowerCase()}`
+      const pending = getPendingRewards()
+      pending.push({
+        xp: xpEarned,
+        moduleId,
+        isModuleComplete,
+        timestamp: Date.now()
+      })
+      localStorage.setItem(key, JSON.stringify(pending))
+      console.log('Added pending reward:', { xp: xpEarned, moduleId, isModuleComplete })
+    } catch (err) {
+      console.error('Failed to save pending reward:', err)
+    }
+  }
+
+  const clearPendingRewards = () => {
+    if (!wallet.address) return
+    try {
+      const key = `pending_rewards_${wallet.address.toLowerCase()}`
+      localStorage.removeItem(key)
+    } catch (err) {
+      console.error('Failed to clear pending rewards:', err)
+    }
+  }
+
+  // Helper functions for localStorage
+  const getCompletedModules = () => {
+    if (!wallet.address) return new Set()
+    try {
+      const key = `completed_modules_${wallet.address.toLowerCase()}`
+      const stored = localStorage.getItem(key)
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch {
+      return new Set()
+    }
+  }
+
+  const markModuleCompleted = (moduleId) => {
+    if (!wallet.address || practiceMode) return
+    try {
+      const key = `completed_modules_${wallet.address.toLowerCase()}`
+      const completed = getCompletedModules()
+      completed.add(moduleId)
+      localStorage.setItem(key, JSON.stringify([...completed]))
+    } catch (err) {
+      console.error('Failed to save completed module:', err)
+    }
+  }
+
+  const isModuleCompleted = (moduleId) => {
+    if (!wallet.address) return false
+    return getCompletedModules().has(moduleId)
+  }
 
   const lessonsForLanguage = useMemo(
     () =>
@@ -224,13 +362,20 @@ function App() {
     return Math.min(LESSON_REWARD_CAP, xpEarned / 100)
   }
   const rewardPreview = Number(computeRewardFromXp(lastRunXp || moduleSessionXp))
-  // Show on-chain balance if contract is connected and we have a balance
-  // Otherwise show preview (for current lesson before it's recorded)
-  // If on-chain balance exists, use it (it accumulates all rewards)
-  // If not, show preview so user can see their current lesson reward
+  
+  // Calculate pending rewards total (ONLY lesson rewards, NO 10 CELO module bonus)
+  const pendingRewards = getPendingRewards()
+  const pendingRewardTotal = pendingRewards.reduce((sum, r) => {
+    const lessonReward = computeRewardFromXp(r.xp)
+    // NO module completion bonus (10 CELO removed)
+    return sum + lessonReward
+  }, 0)
+  
+  // Show on-chain balance + pending rewards if available, otherwise show local preview
+  // Pending rewards will be recorded when user views rewards screen or claims
   const claimableBalance = rewardContract && VAULT_ADDRESS && claimableOnChain > 0
-    ? claimableOnChain
-    : (rewardPreview > 0 ? rewardPreview : (claimableOnChain > 0 ? claimableOnChain : 0))
+    ? claimableOnChain + pendingRewardTotal
+    : (rewardPreview > 0 ? rewardPreview : pendingRewardTotal)
   const heroContent = HERO_COPY[activeView] ?? HERO_COPY.home
 
   const showToast = (message) => {
@@ -291,15 +436,17 @@ function App() {
   }
 
   const updateLeaderboard = (moduleId, xpEarned) => {
-    if (!xpEarned) return
+    if (!xpEarned || !wallet.address) return
     setLeaderboards((prev) => {
       const current = prev[moduleId] ?? []
       const entryLabel =
         wallet.address && wallet.address.length > 8
           ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
           : wallet.address || 'Guest'
+      // Remove old entry for this wallet
       const filtered = current.filter((entry) => entry.name !== entryLabel)
-      const next = [...filtered, { name: entryLabel, xp: xpEarned }]
+      // Add new entry with current total XP (not just session XP)
+      const next = [...filtered, { name: entryLabel, xp: xp }]
         .sort((a, b) => b.xp - a.xp)
         .slice(0, 10)
       return { ...prev, [moduleId]: next }
@@ -310,11 +457,11 @@ function App() {
   const renderHome = () => (
     <section className="single-screen-card home-screen">
       <div>
-        <p className="eyebrow">Now playing</p>
+        <p className="eyebrow">Current module</p>
         <h2>{lesson?.title ?? 'Module selected'}</h2>
         <p className="muted-line">
-          {getLevelLabel(lesson?.level ?? selectedLevel)} · {lesson?.questions.length ?? 10} prompts · Cap{' '}
-          {formatCelo(LESSON_REWARD_CAP)}
+          {getLevelLabel(lesson?.level ?? selectedLevel)} · {lesson?.questions.length ?? 10} questions · Earn up to{' '}
+          {formatCelo(LESSON_REWARD_CAP)} CELO + XP
         </p>
       </div>
 
@@ -343,22 +490,26 @@ function App() {
         </div>
         <div>
           <p className="eyebrow">Loot</p>
-          <small>{lootDrop || 'Clear today’s lesson for a drop.'}</small>
+          <small>{lootDrop || 'Complete lessons to earn XP, CELO, and NFTs.'}</small>
         </div>
       </div>
 
           <div className="home-actions">
             <button className="primary" type="button" onClick={() => switchView('learn')}>
-          Resume lesson
+          Start learning
             </button>
             <button className="ghost" type="button" onClick={() => switchView('rewards')}>
-          Check rewards
+          View rewards
             </button>
           </div>
       </section>
     )
 
-  const renderLearn = () => (
+  const renderLearn = () => {
+    const moduleIsCompleted = isModuleCompleted(lesson?.id)
+    const canAttempt = practiceMode || !moduleIsCompleted || !wallet.address
+    
+    return (
     <section className="single-screen-card lesson-screen">
       <div className="selectors">
         <label>
@@ -386,7 +537,7 @@ function App() {
           <select value={selectedLessonId} onChange={(e) => handleLessonSelect(e.target.value)}>
             {lessonsForLanguage.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.title}
+                {item.title} {isModuleCompleted(item.id) && wallet.address ? '✓' : ''}
               </option>
             ))}
           </select>
@@ -394,6 +545,105 @@ function App() {
           </div>
 
           {lesson && (
+            <>
+            {!canAttempt && !reviewMode && (
+              <div className="summary" style={{ marginBottom: '1rem', background: 'rgba(0, 224, 255, 0.1)', border: '1px solid rgba(0, 224, 255, 0.3)' }}>
+                <p style={{ margin: 0, color: '#c5f3ff' }}>
+                  ✓ This module is already completed. You can practice it or review your answers.
+                </p>
+                <div className="summary-actions" style={{ marginTop: '0.8rem' }}>
+                  <button className="secondary" type="button" onClick={() => setPracticeMode(true)}>
+                    Practice mode
+                  </button>
+                  {status === 'lesson-complete' && (
+                    <button className="ghost" type="button" onClick={() => setReviewMode(true)}>
+                      Review answers
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            {reviewMode && status === 'lesson-complete' && answers.length > 0 ? (
+              <div className="question-card">
+                <div className="question-head">
+                  <div>
+                    <p className="eyebrow">Review</p>
+                    <h2>Your Answers</h2>
+                    <p className="lesson-meta">
+                      Review all {totalQuestions} questions and your selected answers
+                    </p>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                  {lesson.questions.map((q, idx) => {
+                    const answerRecord = answers.find((entry) => entry.id === `${lesson.id}-${idx}`)
+                    const selectedAnswer = answerRecord?.selected
+                    const isCorrect = selectedAnswer === q.answer
+                    
+                    return (
+                      <div key={idx} style={{ 
+                        padding: '1rem', 
+                        borderRadius: '12px', 
+                        background: isCorrect ? 'rgba(0, 196, 140, 0.1)' : 'rgba(255, 88, 122, 0.1)',
+                        border: `1px solid ${isCorrect ? 'rgba(0, 196, 140, 0.3)' : 'rgba(255, 88, 122, 0.3)'}`
+                      }}>
+                        <p style={{ margin: '0 0 0.5rem 0', fontWeight: 600, fontSize: '0.9rem' }}>
+                          Question {idx + 1}/{totalQuestions}
+                        </p>
+                        <h3 style={{ margin: '0 0 0.8rem 0', fontSize: '1.1rem' }}>{q.prompt}</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {q.options.map((opt) => {
+                            const isSelected = opt === selectedAnswer
+                            const isRightAnswer = opt === q.answer
+                            
+                            return (
+                              <div
+                                key={opt}
+                                style={{
+                                  padding: '0.6rem 0.8rem',
+                                  borderRadius: '8px',
+                                  background: isRightAnswer 
+                                    ? 'rgba(0, 196, 140, 0.2)' 
+                                    : isSelected 
+                                    ? 'rgba(255, 88, 122, 0.2)' 
+                                    : 'rgba(255, 255, 255, 0.05)',
+                                  border: `1px solid ${
+                                    isRightAnswer 
+                                      ? 'rgba(0, 196, 140, 0.5)' 
+                                      : isSelected 
+                                      ? 'rgba(255, 88, 122, 0.5)' 
+                                      : 'rgba(255, 255, 255, 0.1)'
+                                  }`,
+                                  color: isRightAnswer ? '#00c48c' : isSelected ? '#ff587a' : '#fefefe'
+                                }}
+                              >
+                                {opt} {isRightAnswer && '✓'} {isSelected && !isRightAnswer && '✗'}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {q.tip && (
+                          <p style={{ margin: '0.8rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            💡 {q.tip}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                
+                <div className="summary-actions" style={{ marginTop: '1.5rem' }}>
+                  <button className="secondary" type="button" onClick={() => setReviewMode(false)}>
+                    Back
+                  </button>
+                  <button className="ghost" type="button" onClick={() => resetLesson({ practice: true })}>
+                    Practice again
+                  </button>
+                </div>
+              </div>
+            ) : (
         <div className="question-card compact">
               <div className="question-head">
                 <div>
@@ -450,8 +700,8 @@ function App() {
                     {practiceMode
                       ? 'Practice run complete. XP stays the same.'
                       : lastRunXp
-                      ? `Lesson cleared! +${lastRunXp} XP → ${formatCelo(rewardPreview)} lesson reward capped at 1 CELO.`
-                      : 'Lesson cleared. Hit practice to refine your streak.'}
+                      ? `Module completed! +${lastRunXp} XP earned. Claim ${formatCelo(rewardPreview)} CELO reward.`
+                      : 'Module completed! Practice mode to refine your skills.'}
                   </p>
                   <div className="summary-actions">
                     {!practiceMode && (
@@ -464,6 +714,11 @@ function App() {
                         Claim {formatCelo(claimableBalance)}
                       </button>
                     )}
+                    {answers.length > 0 && (
+                      <button className="secondary" type="button" onClick={() => setReviewMode(true)}>
+                        Review answers
+                      </button>
+                    )}
                     <button className="secondary" type="button" onClick={goToNextLesson}>
                       Next lesson
                     </button>
@@ -471,25 +726,37 @@ function App() {
                       Practice run
                     </button>
                   </div>
-                  <p className="practice-hint">Practice runs won’t earn XP or CELO.</p>
+                  <p className="practice-hint">Practice mode helps you learn without earning rewards. Complete modules to earn XP, CELO, and NFTs.</p>
                 </div>
               ) : (
                 <p className="tip-line">{currentQuestion?.tip}</p>
               )}
             </div>
+            )}
+          </>
           )}
         </section>
   )
+  }
 
-  const renderRewards = () => (
+  const renderRewards = () => {
+    const pending = getPendingRewards()
+    const hasPending = pending.length > 0
+    
+    return (
     <section id="rewards" className="single-screen-card reward-screen">
       <div className="stat-card reward-card">
         <p className="eyebrow">Vault</p>
         <h3>
           {claimableBalance
             ? `Ready to claim: ${formatCelo(claimableBalance)}`
-            : lootDrop || 'Clear a lesson or module to unlock CELO'}
+            : lootDrop || 'Complete language modules to earn XP, CELO rewards, and unlock NFTs'}
         </h3>
+        {hasPending && (
+          <p style={{ margin: '0.5rem 0', color: 'var(--accent)', fontSize: '0.9rem' }}>
+            {pending.length} pending reward{pending.length > 1 ? 's' : ''} will be added to vault when you view this screen or claim
+          </p>
+        )}
         <button
           className="primary"
           type="button"
@@ -499,31 +766,8 @@ function App() {
           {status === 'claiming' ? 'Signing…' : claimableBalance ? 'Claim now' : 'Keep learning'}
         </button>
         <small className="muted-line">
-          Lesson cap: 1 CELO · Module drop: +10 CELO. Rewards accumulate in your vault. {lootDrop || 'Complete lessons to build your balance.'}
+          Earn XP and CELO rewards for every lesson. Unlock exclusive NFTs at milestones. {lootDrop || 'Start learning to earn rewards.'}
         </small>
-        {/* Developer reset button - remove in production */}
-        <button
-          className="ghost"
-          type="button"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            console.log('Reset button clicked')
-            resetAllStatistics()
-          }}
-          style={{ 
-            marginTop: '1rem', 
-            fontSize: '0.75rem', 
-            opacity: 0.7,
-            cursor: 'pointer',
-            padding: '0.5rem 1rem',
-            border: '1px solid rgba(255,255,255,0.2)',
-            borderRadius: '4px'
-          }}
-          title="Reset all statistics for testing"
-        >
-          🔄 Reset All Stats (Testing)
-        </button>
       </div>
 
       <div className="stat-card quests compact">
@@ -543,7 +787,8 @@ function App() {
         </div>
       </div>
     </section>
-  )
+    )
+  }
 
   const renderLeaderboard = () => (
     <section id="leaderboard" className="single-screen-card leaderboard-screen">
@@ -552,7 +797,7 @@ function App() {
         <div className="countdown-chip">
           <span>Reset in {resetCountdown}</span>
         </div>
-        <p className="leaderboard-reward">Top 10 giants split 100 CELO every reset.</p>
+        <p className="leaderboard-reward">Top 10 learners earn exclusive CELO rewards and NFT drops every week.</p>
         <div className="user-rank-chip">
           {userRankIndex >= 0 ? (
             <>
@@ -560,7 +805,7 @@ function App() {
               <strong>#{userRankIndex + 1}</strong>
             </>
           ) : (
-            <small>Complete a lesson to place on the board.</small>
+            <small>Complete modules and earn XP to appear on the leaderboard.</small>
           )}
         </div>
         {moduleLeaderboard.length ? (
@@ -583,22 +828,193 @@ function App() {
     </section>
   )
 
+  const renderWallet = () => {
+    const formatDate = (timestamp) => {
+      const date = new Date(timestamp)
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+
+    const formatAddress = (address) => {
+      if (!address) return ''
+      return `${address.slice(0, 6)}...${address.slice(-4)}`
+    }
+
+    return (
+      <section id="wallet" className="single-screen-card wallet-screen">
+        <div className="stat-card reward-card">
+          <p className="eyebrow">Wallet Balance</p>
+          <h3>{formatCelo(walletBalance)}</h3>
+          <small className="muted-line">
+            {wallet.address && (
+              <>
+                Address: {formatAddress(wallet.address)}<br />
+                Network: {wallet.type} · Celo Sepolia
+              </>
+            )}
+          </small>
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className="secondary"
+              type="button"
+              onClick={fetchWalletBalance}
+              disabled={!provider || !wallet.address}
+            >
+              Refresh Balance
+            </button>
+            <button
+              className="secondary"
+              type="button"
+              onClick={fetchTransactions}
+              disabled={loadingTransactions || !VAULT_ADDRESS}
+            >
+              {loadingTransactions ? 'Loading...' : 'Refresh History'}
+            </button>
+            <button
+              type="button"
+              className="wallet-button compact"
+              onClick={handleWalletButtonClick}
+              disabled={status === 'connecting'}
+              title={wallet.address || 'Connect wallet'}
+            >
+              {status === 'connecting' ? 'Connecting…' : walletLabel}
+              {wallet.type && <span className="wallet-pill mini">{wallet.type}</span>}
+            </button>
+          </div>
+        </div>
+
+        <div className="stat-card quests compact">
+          <p className="eyebrow">Transaction History</p>
+          {loadingTransactions ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
+              Loading transactions...
+            </p>
+          ) : transactions.length > 0 ? (
+            <div className="quest-grid" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {transactions.map((tx) => (
+                <div
+                  key={tx.hash}
+                  className="quest-row slim"
+                  style={{
+                    padding: '0.8rem',
+                    borderRadius: '12px',
+                    border: `1px solid ${
+                      tx.type === 'received' 
+                        ? 'rgba(0, 196, 140, 0.3)' 
+                        : 'rgba(255, 255, 255, 0.15)'
+                    }`,
+                    background: tx.type === 'received' 
+                      ? 'rgba(0, 196, 140, 0.08)' 
+                      : 'rgba(255, 255, 255, 0.03)',
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                      <strong style={{ color: tx.type === 'received' ? '#00c48c' : '#fefefe' }}>
+                        {tx.type === 'received' ? '↓ Received' : '↑ Sent'}
+                      </strong>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '6px',
+                          background: tx.status === 'success' 
+                            ? 'rgba(0, 196, 140, 0.2)' 
+                            : 'rgba(255, 88, 122, 0.2)',
+                          color: tx.status === 'success' ? '#00c48c' : '#ff587a',
+                        }}
+                      >
+                        {tx.status === 'success' ? '✓' : '✗'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '0.3rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {formatDate(tx.timestamp)}
+                    </p>
+                    <p style={{ margin: '0.3rem 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {tx.type === 'sent' 
+                        ? `Contract → ${formatAddress(tx.to)}` 
+                        : tx.type === 'received'
+                        ? `${formatAddress(tx.from)} → Contract`
+                        : `${formatAddress(tx.from)} → ${formatAddress(tx.to)}`}
+                      {tx.involvesUserWallet && (
+                        <span style={{ 
+                          display: 'inline-block', 
+                          marginLeft: '0.5rem',
+                          padding: '0.2rem 0.4rem',
+                          borderRadius: '4px',
+                          background: 'rgba(0, 224, 255, 0.2)',
+                          color: '#c5f3ff',
+                          fontSize: '0.7rem'
+                        }}>
+                          Your wallet
+                        </span>
+                      )}
+                    </p>
+                    <a
+                      href={`https://celo-sepolia.blockscout.com/tx/${tx.hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: '0.7rem',
+                        color: 'var(--accent)',
+                        textDecoration: 'none',
+                        marginTop: '0.3rem',
+                        display: 'inline-block',
+                      }}
+                    >
+                      View on Blockscout →
+                    </a>
+                  </div>
+                  <span style={{ fontSize: '1rem', fontWeight: 600, color: tx.type === 'received' ? '#00c48c' : '#fefefe' }}>
+                    {tx.type === 'received' ? '+' : '-'}{formatCelo(tx.value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
+              {VAULT_ADDRESS 
+                ? 'No contract transactions found. Complete lessons and claim rewards to see transaction history.'
+                : 'Contract address not configured.'}
+            </p>
+          )}
+        </div>
+      </section>
+    )
+  }
+
   const renderLanding = () => {
     const landingCopy = HERO_COPY.home
     return (
       <section className="single-screen-card landing-card">
-        <p className="eyebrow">{landingCopy.eyebrow}</p>
-        <h1>{landingCopy.title}</h1>
-        <p className="landing-note">{landingCopy.subtitle}</p>
-        <button
-          type="button"
-          className="wallet-button big"
-          onClick={() => connectWallet('auto')}
-          disabled={status === 'connecting'}
-        >
-          {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
-        </button>
-        {toast && <div className="toast inline">{toast}</div>}
+        <div className="landing-content">
+          <p className="eyebrow">{landingCopy.eyebrow}</p>
+          <h1>
+            {landingCopy.title.split(' ').map((word, idx) => {
+              const cleanWord = word.replace(/[.,]/g, '')
+              const isEmphasized = cleanWord === 'quests' || cleanWord === 'loot'
+              const displayWord = word
+              return isEmphasized ? <em key={idx}>{displayWord} </em> : <span key={idx}>{displayWord} </span>
+            })}
+          </h1>
+          <p className="landing-note">{landingCopy.subtitle}</p>
+        </div>
+        <div className="landing-actions">
+          <button
+            type="button"
+            className="wallet-button big"
+            onClick={() => connectWallet('auto')}
+            disabled={status === 'connecting'}
+          >
+            {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
+          </button>
+          {toast && <div className="toast inline">{toast}</div>}
+        </div>
       </section>
     )
   }
@@ -767,17 +1183,92 @@ function App() {
     return () => clearInterval(interval)
   }, [weekBucket])
 
-  useEffect(() => {
-    if (!rewardContract || !wallet.address) return
-    refreshOnchainClaimable(rewardContract, wallet.address)
-  }, [rewardContract, wallet.address])
+  // REMOVED: Automatic refresh on contract/wallet change - this was causing MetaMask popups
+  // Balance will only refresh when user explicitly clicks "Claim" or views rewards screen manually
+  // useEffect(() => {
+  //   if (!rewardContract || !wallet.address) return
+  //   refreshOnchainClaimable(rewardContract, wallet.address)
+  // }, [rewardContract, wallet.address])
 
-  // Refresh claimable balance when user views the rewards screen
+  // Refresh balance when user views the rewards screen (NO auto-recording to prevent MetaMask popup)
   useEffect(() => {
-    if (activeView === 'rewards' && rewardContract && wallet.address) {
+    if (activeView === 'rewards' && rewardContract && wallet.address && status !== 'claiming' && !isClaimingRef.current) {
+      // Only refresh balance, do NOT auto-record (prevents MetaMask popup)
       refreshOnchainClaimable(rewardContract, wallet.address)
     }
   }, [activeView, rewardContract, wallet.address])
+
+  // Update leaderboard regularly (every 5 seconds when on leaderboard view)
+  useEffect(() => {
+    if (activeView !== 'leaderboard' || !wallet.address) return
+    
+    const updateInterval = setInterval(() => {
+      // Trigger leaderboard update by updating current user's entry if they have XP
+      if (xp > 0 && lesson) {
+        updateLeaderboard(lesson.id, xp)
+      }
+    }, 5000) // Update every 5 seconds
+    
+    return () => clearInterval(updateInterval)
+  }, [activeView, wallet.address, xp, lesson])
+
+  // Load wallet stats when wallet address changes
+  useEffect(() => {
+    if (wallet.address) {
+      const stats = getWalletStats(wallet.address)
+      setXp(stats.xp)
+      setStreak(stats.streak)
+      setWeeklyCompletion(stats.weeklyCompletion)
+    } else {
+      // Reset to zero when disconnected
+      setXp(0)
+      setStreak(0)
+      setWeeklyCompletion(0)
+    }
+  }, [wallet.address])
+
+  // Fetch wallet balance when wallet connects or provider changes
+  useEffect(() => {
+    if (provider && wallet.address) {
+      fetchWalletBalance()
+    } else {
+      setWalletBalance(0)
+    }
+  }, [provider, wallet.address])
+
+  // Auto-refresh wallet balance periodically when on wallet screen
+  useEffect(() => {
+    if (activeView !== 'wallet' || !provider || !wallet.address) return
+    
+    // Fetch immediately
+    fetchWalletBalance()
+    
+    // Then refresh every 10 seconds
+    const interval = setInterval(() => {
+      fetchWalletBalance()
+    }, 10000)
+    
+    return () => clearInterval(interval)
+  }, [activeView, provider, wallet.address])
+
+  // Fetch transactions when wallet screen is opened
+  useEffect(() => {
+    if (activeView === 'wallet' && VAULT_ADDRESS && !loadingTransactions) {
+      fetchTransactions()
+    }
+  }, [activeView, VAULT_ADDRESS])
+
+  // Refresh wallet balance after successful claim
+  useEffect(() => {
+    if (status === 'idle' && provider && wallet.address && activeView === 'wallet') {
+      // Small delay to allow blockchain state to update
+      const timer = setTimeout(() => {
+        fetchWalletBalance()
+        fetchTransactions()
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [status, provider, wallet.address, activeView])
 
 
   const detectMiniPayProvider = () => {
@@ -924,30 +1415,44 @@ function App() {
         walletType = activeProvider.isMiniPay || activeProvider === window.miniPay ? 'MiniPay' : 'MetaMask'
       }
       
+      const walletAddress = accounts[0]
       setWallet({
-        address: accounts[0],
+        address: walletAddress,
         chainId,
         type: walletType,
       })
       setProvider(activeProvider)
       setStatus('connected')
+      
+      // Load wallet-specific stats when wallet connects
+      const walletStats = getWalletStats(walletAddress)
+      setXp(walletStats.xp)
+      setStreak(walletStats.streak)
+      setWeeklyCompletion(walletStats.weeklyCompletion)
+      
       showToast(`Connected to ${walletType}`)
       setActiveView('home')
       // Clear disconnect flag on successful connection
       sessionStorage.removeItem('wallet_disconnected')
 
-      // Initialize contract connection
+      // Initialize contract connection - USE PROVIDER (read-only) NOT SIGNER to prevent MetaMask popups
       if (VAULT_ADDRESS) {
         try {
           const browserProvider = new BrowserProvider(activeProvider)
-          const signer = await browserProvider.getSigner()
-          const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
+          // Create contract WITHOUT signer for read-only operations (prevents MetaMask popups)
+          // Signer will be created fresh when needed for transactions (claim, submitLesson, etc.)
+          const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, browserProvider)
           setRewardContract(contract)
           
-          // Fetch initial claimable balance
-          const info = await contract.learners(accounts[0])
-          setClaimableOnChain(Number(formatEther(info.claimable)))
-          console.log('Contract initialized for', walletType)
+          // Fetch initial claimable balance (read-only, no signer needed, no MetaMask popup)
+          try {
+            const info = await contract.learners(accounts[0])
+            setClaimableOnChain(Number(formatEther(info.claimable)))
+            console.log('Contract initialized for', walletType, '- Balance:', Number(formatEther(info.claimable)), 'CELO')
+          } catch (err) {
+            console.warn('Could not fetch initial balance (non-critical):', err)
+            setClaimableOnChain(0)
+          }
         } catch (error) {
           console.error('Contract initialization error:', error)
           // Don't fail the connection if contract init fails
@@ -991,6 +1496,8 @@ function App() {
       setProvider(null)
       setRewardContract(null)
       setClaimableOnChain(0)
+      setWalletBalance(0)
+      setTransactions([])
       setStatus('idle')
       setActiveView('home')
       setAnswers([])
@@ -1006,67 +1513,17 @@ function App() {
     }
   }
 
-  const resetAllStatistics = () => {
-    // Reset all user statistics for testing - COMPLETE RESET
-    console.log('=== RESETTING ALL STATISTICS ===')
-    
-    // Clear all state immediately
-    setXp(0)
-    setStreak(0)
-    setWeeklyCompletion(0)
-    setClaimableOnChain(0) // Set to zero - don't refresh from contract
-    setModuleSessionXp(0)
-    setLastRunXp(0)
-    setLootDrop('')
-    setAnswers([])
-    setQuestionIndex(0)
-    setLeaderboards(buildDefaultLeaderboards())
-    setStatus('idle')
-    setPracticeMode(false)
-    setToast('')
-    
-    // Reset lesson state to first lesson
-    setSelectedLanguage(LANGUAGES[0].id)
-    setSelectedLevel(LEVELS[0].id)
-    const firstModule = MODULES_DATA.find(m => m.languageId === LANGUAGES[0].id && m.level === LEVELS[0].id)
-    if (firstModule) {
-      setSelectedLessonId(firstModule.id)
-    }
-    
-    // Clear any stored data
-    try {
-      sessionStorage.removeItem('wallet_disconnected')
-      localStorage.clear()
-      console.log('Cleared all storage')
-    } catch (e) {
-      console.warn('Could not clear storage:', e)
-    }
-    
-    // Show toast and force UI update
-    showToast('All statistics reset to zero')
-    
-    // Force a complete re-render by toggling view
-    const currentView = activeView
-    setActiveView('home')
-    setTimeout(() => {
-      if (currentView !== 'home') {
-        setActiveView(currentView)
-      }
-    }, 100)
-    
-    console.log('Reset complete - All stats set to zero:', {
-      xp: 0,
-      streak: 0,
-      weeklyCompletion: 0,
-      claimableOnChain: 0,
-      moduleSessionXp: 0,
-      lastRunXp: 0
-    })
-    console.log('=== RESET COMPLETE ===')
-  }
 
   const handleAnswer = (option) => {
     if (!lesson || status === 'claiming') return
+    
+    // Prevent answering if module is already completed (unless in practice mode)
+    const moduleIsCompleted = isModuleCompleted(lesson?.id)
+    if (moduleIsCompleted && !practiceMode && wallet.address) {
+      showToast('This module is already completed. Use practice mode to try again.')
+      return
+    }
+    
     const question = lesson.questions[questionIndex]
     if (!question) return
     const isCorrect = question.answer === option
@@ -1086,11 +1543,28 @@ function App() {
     ])
 
     if (xpGain) {
-      setXp((prev) => prev + xpGain)
+      setXp((prev) => {
+        const newXp = prev + xpGain
+        // Save with current streak and weeklyCompletion (will be updated after streak check)
+        setTimeout(() => {
+          saveWalletStats(newXp, streak, weeklyCompletion)
+        }, 0)
+        return newXp
+      })
     }
     setModuleSessionXp(nextSessionXp)
     if (!practiceMode) {
-      setStreak((prev) => (isCorrect ? prev + 1 : 0))
+      setStreak((prev) => {
+        const newStreak = isCorrect ? prev + 1 : 0
+        // Save with current xp and weeklyCompletion
+        setTimeout(() => {
+          setXp((currentXp) => {
+            saveWalletStats(currentXp, newStreak, weeklyCompletion)
+            return currentXp
+          })
+        }, 0)
+        return newStreak
+      })
     }
 
     if (questionIndex + 1 === lesson.questions.length) {
@@ -1102,6 +1576,16 @@ function App() {
       } else {
         const completion = Math.min(100, weeklyCompletion + 20)
         setWeeklyCompletion(completion)
+        // Save stats after state updates
+        setTimeout(() => {
+          setXp((currentXp) => {
+            setStreak((currentStreak) => {
+              saveWalletStats(currentXp, currentStreak, completion)
+              return currentStreak
+            })
+            return currentXp
+          })
+        }, 0)
         setStatus('lesson-complete')
         setLastRunXp(nextSessionXp)
         updateLeaderboard(lesson.id, nextSessionXp)
@@ -1112,32 +1596,21 @@ function App() {
             ? 'Lucky loot: +0.02 CELO claimable ⚡'
             : 'Daily streak protected! 🔥'
         )
-        // Record lesson on-chain - rewards are added to claimable balance
-        // CRITICAL: NEVER record if currently claiming - check both state and ref
-        if (rewardContract && VAULT_ADDRESS && nextSessionXp > 0) {
-          // MULTIPLE CHECKS to prevent recording during claim (check both state and ref)
-          if (status === 'claiming' || isClaimingRef.current) {
-            console.log('BLOCKED: Cannot record lesson - claim in progress (status:', status, 'ref:', isClaimingRef.current, ')')
-            return
-          }
-          
-          // Check if this is the last lesson in the module (module completion)
-          const isModuleComplete = questionIndex + 1 === lesson.questions.length
-          
-          // Check status one more time before calling (check both state and ref)
-          if (status !== 'claiming' && !isClaimingRef.current) {
-            recordLessonOnChain(nextSessionXp, isModuleComplete).catch(err => {
-              console.error('Failed to record lesson on-chain:', err)
-            })
-          } else {
-            console.log('BLOCKED: Status is claiming, skipping lesson recording')
-          }
+        // Mark module as completed (but NO 10 CELO bonus)
+        const wasAlreadyCompleted = isModuleCompleted(lesson.id)
+        const isModuleComplete = !wasAlreadyCompleted
+        
+        setPendingModuleCompletion(false) // Never add 10 CELO
+        
+        // Save pending reward to localStorage (no MetaMask popup)
+        // NO module completion bonus - only lesson reward
+        addPendingReward(nextSessionXp, lesson.id, false) // Always false - no 10 CELO
+        
+        if (isModuleComplete) {
+          markModuleCompleted(lesson.id) // Mark as completed to prevent re-attempts
+          console.log('Module completed! XP earned:', nextSessionXp, '- Only lesson reward (NO 10 CELO bonus).')
         } else {
-          if (questionIndex + 1 === lesson.questions.length) {
-            showToast('Module cleared! 10 CELO drop will be added when contract is connected.')
-          } else {
-            showToast('Lesson completed! Reward will be recorded when contract is connected.')
-          }
+          console.log('Lesson completed. XP earned:', nextSessionXp, '- Reward will be added to vault when you claim.')
         }
       }
     } else {
@@ -1152,7 +1625,9 @@ function App() {
     setLootDrop('')
     setModuleSessionXp(0)
     setLastRunXp(0)
+    setPendingModuleCompletion(false)
     setPracticeMode(practice)
+    setReviewMode(false)
   }
 
   const goToNextLesson = () => {
@@ -1164,9 +1639,15 @@ function App() {
   }
 
   const claimReward = async () => {
+    // Prevent multiple simultaneous calls
+    if (isClaimingRef.current || status === 'claiming') {
+      console.log('Claim already in progress, ignoring duplicate call')
+      return
+    }
+    
     const payout = claimableBalance
     if (!payout || payout <= 0) {
-      showToast('Complete lessons to earn CELO rewards.')
+      showToast('Complete language modules to earn XP and CELO rewards.')
       return
     }
     if (!wallet.address) {
@@ -1182,8 +1663,7 @@ function App() {
       return
     }
     
-    // CRITICAL: Set claiming status IMMEDIATELY to prevent any lesson recording
-    // Use both state and ref for immediate blocking
+    // CRITICAL: Set claiming status IMMEDIATELY to prevent duplicate calls
     isClaimingRef.current = true
     setStatus('claiming')
     
@@ -1195,13 +1675,61 @@ function App() {
       const signer = await browserProvider.getSigner()
       const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
       
-      // Check current claimable balance from contract
+      // Record ALL pending rewards and current lesson BEFORE claiming
+      // This ensures rewards are in the vault before we try to claim
+      const pending = getPendingRewards()
+      const hasCurrentLesson = lastRunXp > 0
+      const totalToRecord = pending.length + (hasCurrentLesson ? 1 : 0)
+      
+      if (totalToRecord > 0) {
+        try {
+          console.log('Recording', totalToRecord, 'reward(s) to vault before claim...')
+          showToast(`Recording ${totalToRecord} reward(s)...`)
+          
+          // Record all pending rewards first
+          if (pending.length > 0) {
+            for (const reward of pending) {
+              // ONLY record lesson reward, NEVER call submitModule (no 10 CELO)
+              const lessonProof = id(`${reward.moduleId || 'lesson'}-${reward.timestamp}-${Math.random()}`)
+              const lessonTx = await contract.submitLesson(reward.xp, lessonProof)
+              await lessonTx.wait()
+              console.log('Recorded pending reward:', reward.xp, 'XP (NO 10 CELO)')
+            }
+            clearPendingRewards()
+          }
+          
+          // Record current lesson if it exists
+          if (hasCurrentLesson) {
+            const lessonProof = id(`${lesson?.id || 'lesson'}-${Date.now()}-${Math.random()}`)
+            const lessonTx = await contract.submitLesson(lastRunXp, lessonProof)
+            await lessonTx.wait()
+            console.log('Recorded current lesson reward:', lastRunXp, 'XP (NO 10 CELO)')
+            setLastRunXp(0) // Clear after recording
+          }
+          
+          // Wait a moment for blockchain state to update
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          // Refresh balance after recording
+          const updatedInfo = await contract.learners(wallet.address)
+          const updatedClaimable = Number(formatEther(updatedInfo.claimable))
+          setClaimableOnChain(updatedClaimable)
+          console.log('Balance after recording:', updatedClaimable, 'CELO')
+        } catch (err) {
+          console.error('Failed to record rewards:', err)
+          showToast('Warning: Could not record rewards. Claiming existing balance.')
+          // Continue with claim even if recording fails
+        }
+      }
+      
+      // Check current claimable balance from contract (after recording)
       const currentInfo = await contract.learners(wallet.address)
       const currentClaimable = Number(formatEther(currentInfo.claimable))
       console.log('Current claimable balance from contract:', currentClaimable, 'CELO')
       
       if (currentClaimable <= 0) {
-        showToast('No rewards available to claim. Complete more lessons.')
+        showToast('No rewards available. Complete more modules to earn XP and CELO.')
+        isClaimingRef.current = false
         setStatus('idle')
         setClaimableOnChain(0)
         return
@@ -1287,9 +1815,14 @@ function App() {
       
       showToast(`Success! ${formatCelo(claimableAmount)} sent to your ${wallet.type} wallet.`)
       
-      // Clear all local values
-      setModuleDrops(0)
+      // Clear local values
       setLastRunXp(0)
+      
+      // Refresh wallet balance after successful claim
+      await fetchWalletBalance()
+      if (activeView === 'wallet') {
+        await fetchTransactions()
+      }
       
       console.log('=== CLAIM COMPLETE ===')
     } catch (error) {
@@ -1351,123 +1884,159 @@ function App() {
     }
   }
 
-  const recordLessonOnChain = async (xpAmount, includeModuleDrop = false) => {
-    // CRITICAL: Do not record if currently claiming - check both state and ref
-    if (status === 'claiming' || isClaimingRef.current) {
-      console.log('BLOCKED: Skipping lesson recording - claim in progress (status:', status, 'ref:', isClaimingRef.current, ')')
-      return
-    }
-    
-    // Validate inputs - xpAmount must be > 0 to earn rewards
-    if (!rewardContract || !wallet.address) {
-      console.warn('Cannot record lesson on-chain: missing contract or wallet', {
-        hasContract: !!rewardContract,
-        hasWallet: !!wallet.address
-      })
-      return
-    }
-    
-    if (!xpAmount || xpAmount <= 0) {
-      console.log('Skipping on-chain recording: no XP earned (xpAmount:', xpAmount, ')')
-      return
-    }
-    
+  const fetchWalletBalance = async () => {
+    if (!provider || !wallet.address) return
     try {
-      // CRITICAL: Check status again before starting transaction (check both state and ref)
-      if (status === 'claiming' || isClaimingRef.current) {
-        console.log('BLOCKED: Claim started during lesson recording setup')
-        return
-      }
-      
-      // Always record the lesson first - this adds the lesson reward (up to 1 CELO) to the vault
-      const lessonProof = id(`${lesson?.id || 'lesson'}-${Date.now()}-${Math.random()}`)
-      console.log('Recording lesson on-chain...', { xpAmount, lessonProof, address: wallet.address })
-      
-      showToast('Recording lesson on-chain...')
-      
-      // Get fresh signer to ensure transaction goes through
       const browserProvider = new BrowserProvider(provider)
-      const signer = await browserProvider.getSigner()
-      const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
-      
-      // CRITICAL: Check status one more time right before transaction (check both state and ref)
-      if (status === 'claiming' || isClaimingRef.current) {
-        console.log('BLOCKED: Claim started right before lesson transaction')
-        return
-      }
-      
-      const lessonTx = await contract.submitLesson(xpAmount, lessonProof)
-      console.log('Lesson transaction sent:', lessonTx.hash)
-      
-      showToast('Waiting for lesson confirmation...')
-      const lessonReceipt = await lessonTx.wait()
-      console.log('Lesson transaction confirmed:', lessonReceipt)
-      
-      // CRITICAL: Check status before refreshing balance and before module drop (check both state and ref)
-      if (status === 'claiming' || isClaimingRef.current) {
-        console.log('BLOCKED: Claim started during lesson confirmation')
-        return
-      }
-      
-      // Refresh balance after lesson is recorded
-      await refreshOnchainClaimable(contract, wallet.address)
-      console.log('Balance refreshed after lesson')
-      
-      // If module is complete, also record the module drop (10 CELO)
-      // CRITICAL: Check status AGAIN before calling submitModule - this is where 10 CELO gets added!
-      if (includeModuleDrop) {
-        // FINAL CHECK: Do not add 10 CELO if claim is in progress (check both state and ref)
-        if (status === 'claiming' || isClaimingRef.current) {
-          console.log('BLOCKED: Skipping module drop (10 CELO) - claim in progress! (status:', status, 'ref:', isClaimingRef.current, ')')
-          showToast('Module drop skipped - claim in progress')
-          return
-        }
-        
-        const moduleProof = id(`module-${lesson?.id || 'module'}-${Date.now()}-${Math.random()}`)
-        console.log('Recording module completion...', { moduleProof })
-        
-        showToast('Recording module completion...')
-        
-        // ONE MORE CHECK right before the transaction that adds 10 CELO (check both state and ref)
-        if (status === 'claiming' || isClaimingRef.current) {
-          console.log('BLOCKED: Claim started right before module transaction - PREVENTING 10 CELO ADD! (status:', status, 'ref:', isClaimingRef.current, ')')
-          return
-        }
-        
-        const moduleTx = await contract.submitModule(moduleProof)
-        console.log('Module transaction sent:', moduleTx.hash)
-        
-        showToast('Waiting for module confirmation...')
-        const moduleReceipt = await moduleTx.wait()
-        console.log('Module transaction confirmed:', moduleReceipt)
-        
-        // Final check before showing success (check both state and ref)
-        if (status === 'claiming' || isClaimingRef.current) {
-          console.log('BLOCKED: Claim started during module confirmation')
-          return
-        }
-        
-        showToast('Module completed! +10 CELO added to vault')
-        
-        // Refresh balance again after module drop
-        await refreshOnchainClaimable(contract, wallet.address)
-        console.log('Balance refreshed after module')
-      } else {
-        showToast('Lesson completed! Reward added to vault.')
-      }
+      const balance = await browserProvider.getBalance(wallet.address)
+      const balanceCELO = Number(formatEther(balance))
+      setWalletBalance(balanceCELO)
     } catch (error) {
-      console.error('On-chain recording error:', error)
-      const errorMsg = error?.shortMessage || error?.message || error?.reason || 'Transaction failed'
-      
-      if (errorMsg.includes('User rejected') || errorMsg.includes('denied') || errorMsg.includes('user rejected')) {
-        showToast('Transaction cancelled. Reward will be recorded on next lesson.')
-      } else if (errorMsg.includes('insufficient funds') || errorMsg.includes('gas')) {
-        showToast('Insufficient funds for gas. Please add CELO to your wallet.')
-      } else {
-        showToast(`Recording failed: ${errorMsg}. Try again later.`)
-      }
+      console.error('Error fetching wallet balance:', error)
     }
   }
+
+  const fetchTransactions = async () => {
+    if (!VAULT_ADDRESS) return
+    setLoadingTransactions(true)
+    try {
+      // Fetch regular transactions, internal transactions, and token transfers
+      const [txResponse, internalTxResponse, tokenTxResponse] = await Promise.all([
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`)
+      ])
+      
+      const txData = await txResponse.json()
+      const internalTxData = await internalTxResponse.json()
+      const tokenTxData = await tokenTxResponse.json()
+      
+      // Create a map of internal transactions by hash
+      const internalTxMap = new Map()
+      if (internalTxData.status === '1' && internalTxData.result && Array.isArray(internalTxData.result)) {
+        internalTxData.result.forEach((internalTx) => {
+          const hash = internalTx.hash || internalTx.transactionHash || internalTx.parentHash
+          if (hash) {
+            if (!internalTxMap.has(hash)) {
+              internalTxMap.set(hash, [])
+            }
+            internalTxMap.get(hash).push(internalTx)
+          }
+        })
+      }
+      
+      // Create a map of token transfers (CELO native transfers) by hash
+      const tokenTxMap = new Map()
+      if (tokenTxData.status === '1' && tokenTxData.result && Array.isArray(tokenTxData.result)) {
+        tokenTxData.result.forEach((tokenTx) => {
+          const hash = tokenTx.hash || tokenTx.transactionHash
+          if (hash) {
+            if (!tokenTxMap.has(hash)) {
+              tokenTxMap.set(hash, [])
+            }
+            tokenTxMap.get(hash).push(tokenTx)
+          }
+        })
+      }
+      
+      if (txData.status === '1' && txData.result && Array.isArray(txData.result)) {
+        // Fetch transaction details in parallel for transactions with zero value
+        const txHashesWithZeroValue = txData.result
+          .filter(tx => !tx.value || tx.value === '0')
+          .map(tx => tx.hash)
+          .slice(0, 10) // Limit to 10 to avoid too many requests
+        
+        const txDetailPromises = txHashesWithZeroValue.map(hash =>
+          fetch(`https://celo-sepolia.blockscout.com/api?module=proxy&action=eth_getTransactionByHash&txhash=${hash}`)
+            .then(r => r.json())
+            .then(data => ({ hash, data }))
+            .catch(() => ({ hash, data: null }))
+        )
+        
+        const txDetails = await Promise.all(txDetailPromises)
+        const txDetailMap = new Map()
+        txDetails.forEach(({ hash, data }) => {
+          if (data && data.result) {
+            txDetailMap.set(hash, data.result)
+          }
+        })
+        
+        const formattedTxs = txData.result.map((tx) => {
+          const isToContract = tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
+          const isFromContract = tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
+          const involvesUserWallet = wallet.address && (
+            tx.from?.toLowerCase() === wallet.address.toLowerCase() || 
+            tx.to?.toLowerCase() === wallet.address.toLowerCase()
+          )
+          
+          // Start with the main transaction value
+          let actualValue = Number(formatEther(tx.value || '0'))
+          
+          // Check internal transactions for this hash
+          const internalTxs = internalTxMap.get(tx.hash)
+          if (internalTxs && internalTxs.length > 0) {
+            internalTxs.forEach((itx) => {
+              const itxValue = Number(formatEther(itx.value || '0'))
+              const itxFrom = (itx.from || '').toLowerCase()
+              const itxTo = (itx.to || '').toLowerCase()
+              const contractAddr = VAULT_ADDRESS.toLowerCase()
+              
+              // Contract sending CELO (claim)
+              if (itxFrom === contractAddr && itxValue > 0) {
+                actualValue = Math.max(actualValue, itxValue)
+              }
+              // Contract receiving CELO (funding)
+              if (itxTo === contractAddr && itxValue > 0) {
+                actualValue = Math.max(actualValue, itxValue)
+              }
+            })
+          }
+          
+          // Check transaction detail if we fetched it
+          const txDetail = txDetailMap.get(tx.hash)
+          if (txDetail && txDetail.value) {
+            const detailValue = Number(formatEther(txDetail.value))
+            if (detailValue > 0) {
+              actualValue = Math.max(actualValue, detailValue)
+            }
+          }
+          
+          // Use main transaction value if available
+          if (tx.value && tx.value !== '0') {
+            const mainTxValue = Number(formatEther(tx.value))
+            actualValue = Math.max(actualValue, mainTxValue)
+          }
+          
+          return {
+            hash: tx.hash,
+            from: tx.from,
+            to: tx.to,
+            value: actualValue,
+            timestamp: parseInt(tx.timeStamp || '0', 10) * 1000,
+            status: tx.txreceipt_status === '1' ? 'success' : 'failed',
+            type: isToContract ? 'received' : isFromContract ? 'sent' : 'unknown',
+            involvesUserWallet,
+          }
+        })
+        
+        setTransactions(formattedTxs)
+      } else {
+        setTransactions([])
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error)
+      setTransactions([])
+    } finally {
+      setLoadingTransactions(false)
+    }
+  }
+
+  // REMOVED: recordPendingRewardsToVault - rewards are now recorded directly in claimReward
+  // This prevents multiple MetaMask popups and ensures only ONE transaction
+
+  // REMOVED: recordLessonOnChain - lessons are no longer automatically recorded
+  // Rewards are only recorded when user explicitly clicks "Claim" button
+  // This prevents automatic MetaMask popups and unwanted 10 CELO additions
 
   const walletLabel = isConnected
     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
@@ -1479,18 +2048,6 @@ function App() {
         <p className="eyebrow">{heroContent.eyebrow}</p>
         <h1>{heroContent.title}</h1>
         <p className="subtitle">{heroContent.subtitle}</p>
-      </div>
-      <div className="hero-actions">
-        <button
-          type="button"
-          className="wallet-button compact"
-          onClick={handleWalletButtonClick}
-          disabled={status === 'connecting'}
-          title={wallet.address || 'Connect wallet'}
-        >
-          {status === 'connecting' ? 'Connecting…' : walletLabel}
-          {wallet.type && <span className="wallet-pill mini">{wallet.type}</span>}
-        </button>
       </div>
     </header>
   )
@@ -1506,6 +2063,7 @@ function App() {
             {activeView === 'learn' && renderLearn()}
             {activeView === 'rewards' && renderRewards()}
             {activeView === 'leaderboard' && renderLeaderboard()}
+            {activeView === 'wallet' && renderWallet()}
           </>
         ) : (
           renderLanding()
