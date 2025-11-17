@@ -456,96 +456,54 @@ function App() {
   const getLevelLabel = (id) => LEVELS.find((entry) => entry.id === id)?.label ?? id
   const renderHome = () => (
     <section className="single-screen-card home-screen">
-      <div style={{ marginBottom: '1.5rem' }}>
-        <p className="eyebrow" style={{ marginBottom: '0.5rem' }}>Ready to learn?</p>
-        <h2 style={{ marginBottom: '0.6rem', fontSize: '1.8rem', lineHeight: '1.3' }}>
-          {lesson?.title ?? 'Select a module'}
-        </h2>
-        <p className="muted-line" style={{ fontSize: '0.9rem', lineHeight: '1.5' }}>
-          <span style={{ color: 'rgba(0, 224, 255, 0.9)' }}>{getLevelLabel(lesson?.level ?? selectedLevel)}</span>
-          {' · '}
-          {lesson?.questions.length ?? 10} questions
-          {' · '}
-          <span style={{ color: 'rgba(0, 196, 140, 0.9)' }}>Up to {formatCelo(LESSON_REWARD_CAP)} reward</span>
+      <div>
+        <p className="eyebrow">Current module</p>
+        <h2>{lesson?.title ?? 'Module selected'}</h2>
+        <p className="muted-line">
+          {getLevelLabel(lesson?.level ?? selectedLevel)} · {lesson?.questions.length ?? 10} questions · Earn up to{' '}
+          {formatCelo(LESSON_REWARD_CAP)} CELO + XP
         </p>
       </div>
 
-      <div className="pill-row" style={{ marginBottom: '1.5rem' }}>
-        <div className="pill" style={{ background: 'rgba(0, 224, 255, 0.1)', borderColor: 'rgba(0, 224, 255, 0.3)' }}>
-          <strong style={{ color: '#00e0ff', fontSize: '1.4rem' }}>{xp}</strong>
-          <span style={{ color: 'rgba(0, 224, 255, 0.8)' }}>Total XP</span>
+      <div className="pill-row">
+        <div className="pill">
+          <strong>{xp}</strong>
+          <span>XP</span>
         </div>
-        <div className="pill" style={{ background: 'rgba(255, 100, 50, 0.1)', borderColor: 'rgba(255, 100, 50, 0.3)' }}>
-          <strong style={{ color: '#ff6432', fontSize: '1.4rem' }}>{streak}</strong>
-          <span style={{ color: 'rgba(255, 100, 50, 0.8)' }}>Day streak</span>
+        <div className="pill">
+          <strong>{streak}</strong>
+          <span>day streak</span>
         </div>
-        <div className="pill" style={{ background: 'rgba(124, 77, 255, 0.1)', borderColor: 'rgba(124, 77, 255, 0.3)' }}>
-          <strong style={{ color: '#7c4dff', fontSize: '1.4rem' }}>{userLevel}</strong>
-          <span style={{ color: 'rgba(124, 77, 255, 0.8)' }}>Level</span>
+        <div className="pill">
+          <strong>{userLevel}</strong>
+          <span>level</span>
         </div>
       </div>
 
-      <div className="mini-progress-block" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ 
-          background: 'rgba(0, 224, 255, 0.05)', 
-          border: '1px solid rgba(0, 224, 255, 0.2)', 
-          borderRadius: '12px', 
-          padding: '1rem' 
-        }}>
-          <p className="eyebrow" style={{ marginBottom: '0.6rem', color: 'rgba(0, 224, 255, 0.9)' }}>
-            Weekly Progress
-          </p>
-          <div className="mini-progress" style={{ marginBottom: '0.4rem' }}>
-            <span style={{ width: `${weeklyCompletion}%`, background: 'linear-gradient(90deg, #00e0ff, #7c4dff)' }} />
+      <div className="mini-progress-block">
+        <div>
+          <p className="eyebrow">Weekly unlock</p>
+          <div className="mini-progress">
+            <span style={{ width: `${weeklyCompletion}%` }} />
           </div>
-          <small style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-            {weeklyCompletion}% complete this week
-          </small>
+          <small>{weeklyCompletion}% of this week unlocked</small>
         </div>
-        <div style={{ 
-          background: 'rgba(124, 77, 255, 0.05)', 
-          border: '1px solid rgba(124, 77, 255, 0.2)', 
-          borderRadius: '12px', 
-          padding: '1rem' 
-        }}>
-          <p className="eyebrow" style={{ marginBottom: '0.4rem', color: 'rgba(124, 77, 255, 0.9)' }}>
-            Rewards
-          </p>
-          <small style={{ color: 'rgba(255, 255, 255, 0.8)', lineHeight: '1.5' }}>
-            {lootDrop || 'Complete lessons to unlock CELO rewards and exclusive NFTs.'}
-          </small>
+        <div>
+          <p className="eyebrow">Loot</p>
+          <small>{lootDrop || 'Complete lessons to earn XP, CELO, and NFTs.'}</small>
         </div>
       </div>
 
-      <div className="home-actions" style={{ marginTop: 'auto', gap: '0.75rem' }}>
-        <button 
-          className="primary" 
-          type="button" 
-          onClick={() => switchView('learn')}
-          style={{ 
-            width: '100%', 
-            padding: '1rem 1.5rem',
-            fontSize: '1rem',
-            fontWeight: '600'
-          }}
-        >
-          Start Learning →
-        </button>
-        <button 
-          className="ghost" 
-          type="button" 
-          onClick={() => switchView('rewards')}
-          style={{ 
-            width: '100%', 
-            padding: '0.85rem 1.5rem',
-            fontSize: '0.9rem'
-          }}
-        >
-          View Rewards
-        </button>
-      </div>
-    </section>
-  )
+          <div className="home-actions">
+            <button className="primary" type="button" onClick={() => switchView('learn')}>
+          Start learning
+            </button>
+            <button className="ghost" type="button" onClick={() => switchView('rewards')}>
+          View rewards
+            </button>
+          </div>
+      </section>
+    )
 
   const renderLearn = () => {
     const moduleIsCompleted = isModuleCompleted(lesson?.id)
