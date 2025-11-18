@@ -39,6 +39,26 @@ const HERO_COPY = {
   },
 }
 
+const MINI_PAY_READY_EVENT = 'minipay#initialized'
+
+function getMiniPayProviderFromWindow() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  const global = window
+  if (global?.miniPay?.isMiniPay) {
+    return global.miniPay
+  }
+  const { ethereum } = global
+  if (ethereum?.isMiniPay) {
+    return ethereum
+  }
+  if (Array.isArray(ethereum?.providers)) {
+    return ethereum.providers.find((entry) => entry?.isMiniPay) || null
+  }
+  return null
+}
+
 function getNextWeeklyReset(baseDate = new Date()) {
   const date = new Date(baseDate)
   const day = date.getUTCDay()
@@ -242,6 +262,7 @@ function App() {
   const [lootDrop, setLootDrop] = useState('')
   const [wallet, setWallet] = useState({ address: '', type: '', chainId: '' })
   const [provider, setProvider] = useState(null)
+  const [miniPayProvider, setMiniPayProvider] = useState(() => getMiniPayProviderFromWindow())
   const [status, setStatus] = useState('idle')
   const [toast, setToast] = useState('')
   // Use ref to track claiming status immediately (not subject to React batching)
@@ -942,17 +963,17 @@ function App() {
                         ? `${formatAddress(tx.from)} → Contract`
                         : `${formatAddress(tx.from)} → ${formatAddress(tx.to)}`}
                       {tx.involvesUserWallet && (
-                        <span style={{ 
-                          display: 'inline-block', 
-                          marginLeft: '0.5rem',
-                          padding: '0.2rem 0.4rem',
-                          borderRadius: '4px',
-                          background: 'rgba(0, 224, 255, 0.2)',
-                          color: '#c5f3ff',
-                          fontSize: '0.7rem'
-                        }}>
+                          <span style={{ 
+                            display: 'inline-block', 
+                            marginLeft: '0.5rem',
+                            padding: '0.2rem 0.4rem',
+                            borderRadius: '4px',
+                            background: 'rgba(0, 224, 255, 0.2)',
+                            color: '#c5f3ff',
+                            fontSize: '0.7rem'
+                          }}>
                           Your wallet
-                        </span>
+                          </span>
                       )}
                     </p>
                     <a
@@ -1085,30 +1106,11 @@ function App() {
     window.addEventListener('error', handleError, true)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
     
-    // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
-    const miniPay = detectMiniPayProvider()
-    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
-    
-    let timer = null
-    if (miniPay && !wasDisconnected && !isConnected) {
-      // Small delay to ensure provider is fully ready
-      timer = setTimeout(() => {
-        connectWallet('minipay').catch((err) => {
-          console.log('Auto-connect skipped:', err.message)
-        })
-      }, 500)
-    }
-    
     return () => {
       // Clean up error handlers
       window.removeEventListener('error', handleError, true)
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
-      // Clean up auto-connect timer
-      if (timer) {
-        clearTimeout(timer)
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1116,6 +1118,22 @@ function App() {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel()
       }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined
+    const syncMiniPayProvider = () => {
+      setMiniPayProvider(getMiniPayProviderFromWindow())
+    }
+    syncMiniPayProvider()
+    window.addEventListener('focus', syncMiniPayProvider)
+    document.addEventListener('visibilitychange', syncMiniPayProvider)
+    window.addEventListener(MINI_PAY_READY_EVENT, syncMiniPayProvider)
+    return () => {
+      window.removeEventListener('focus', syncMiniPayProvider)
+      document.removeEventListener('visibilitychange', syncMiniPayProvider)
+      window.removeEventListener(MINI_PAY_READY_EVENT, syncMiniPayProvider)
     }
   }, [])
 
@@ -1254,8 +1272,8 @@ function App() {
   // Fetch transactions when wallet screen is opened
   useEffect(() => {
     if (activeView === 'wallet' && VAULT_ADDRESS && !loadingTransactions) {
-      fetchTransactions()
-    }
+        fetchTransactions()
+      }
   }, [activeView, VAULT_ADDRESS])
 
   // Refresh wallet balance after successful claim
@@ -1263,31 +1281,13 @@ function App() {
     if (status === 'idle' && provider && wallet.address && activeView === 'wallet') {
       // Small delay to allow blockchain state to update
       const timer = setTimeout(() => {
-        fetchWalletBalance()
-        fetchTransactions()
+          fetchWalletBalance()
+          fetchTransactions()
       }, 2000)
       return () => clearTimeout(timer)
     }
   }, [status, provider, wallet.address, activeView])
 
-
-  const detectMiniPayProvider = () => {
-    try {
-      const global = window
-      if (!global) return null
-      if (global.miniPay) return global.miniPay
-      const providers = global.ethereum?.providers
-      if (Array.isArray(providers)) {
-        const mini = providers.find((entry) => entry.isMiniPay)
-        if (mini) return mini
-      }
-      if (global.ethereum?.isMiniPay) return global.ethereum
-      return null
-    } catch (error) {
-      console.warn('Error detecting MiniPay:', error)
-      return null
-    }
-  }
 
   const detectMetaMaskProvider = () => {
     try {
@@ -1369,7 +1369,7 @@ function App() {
   const connectWallet = async (preferred = 'auto') => {
     try {
       setStatus('connecting')
-      const miniPay = detectMiniPayProvider()
+      const miniPay = miniPayProvider ?? getMiniPayProviderFromWindow()
       const metaMask = detectMetaMaskProvider()
       
       let activeProvider = null
@@ -1480,6 +1480,20 @@ function App() {
       setStatus('idle')
     }
   }
+
+  useEffect(() => {
+    if (!miniPayProvider || isConnected) return
+    if (typeof window === 'undefined') return undefined
+    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
+    if (wasDisconnected) return undefined
+    const timer = setTimeout(() => {
+      connectWallet('minipay').catch((error) => {
+        console.info('MiniPay auto-connect skipped:', error?.message || error)
+      })
+    }, 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [miniPayProvider, isConnected])
 
   const handleWalletButtonClick = () => {
     if (status === 'connecting') return
@@ -1767,12 +1781,12 @@ function App() {
       if (contractBalanceCELO >= currentClaimable) {
         // Contract has enough - claim all
         console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
-        tx = await contract.claimAll({ gasLimit: 150000 })
+            tx = await contract.claimAll({ gasLimit: 150000 })
       } else {
         // Contract doesn't have enough - claim only what's available
         const amountWei = parseEther(claimableAmount.toFixed(6))
         console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
-        tx = await contract.claim(amountWei, { gasLimit: 150000 })
+            tx = await contract.claim(amountWei, { gasLimit: 150000 })
       }
       console.log('Claim transaction sent:', tx.hash)
       
@@ -1976,18 +1990,18 @@ function App() {
           const internalTxs = internalTxMap.get(tx.hash)
           if (internalTxs && internalTxs.length > 0) {
             internalTxs.forEach((itx) => {
-              const itxValue = Number(formatEther(itx.value || '0'))
-              const itxFrom = (itx.from || '').toLowerCase()
-              const itxTo = (itx.to || '').toLowerCase()
+                const itxValue = Number(formatEther(itx.value || '0'))
+                const itxFrom = (itx.from || '').toLowerCase()
+                const itxTo = (itx.to || '').toLowerCase()
               const contractAddr = VAULT_ADDRESS.toLowerCase()
-              
+                
               // Contract sending CELO (claim)
               if (itxFrom === contractAddr && itxValue > 0) {
-                actualValue = Math.max(actualValue, itxValue)
-              }
+                  actualValue = Math.max(actualValue, itxValue)
+                }
               // Contract receiving CELO (funding)
               if (itxTo === contractAddr && itxValue > 0) {
-                actualValue = Math.max(actualValue, itxValue)
+                  actualValue = Math.max(actualValue, itxValue)
               }
             })
           }
@@ -2003,8 +2017,8 @@ function App() {
           
           // Use main transaction value if available
           if (tx.value && tx.value !== '0') {
-            const mainTxValue = Number(formatEther(tx.value))
-            actualValue = Math.max(actualValue, mainTxValue)
+              const mainTxValue = Number(formatEther(tx.value))
+              actualValue = Math.max(actualValue, mainTxValue)
           }
           
           return {
