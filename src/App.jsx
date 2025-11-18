@@ -41,20 +41,33 @@ const HERO_COPY = {
 
 const MINI_PAY_READY_EVENT = 'minipay#initialized'
 
+function normalizeProvider(candidate) {
+  if (!candidate) return null
+  if (typeof candidate.request === 'function') {
+    return candidate
+  }
+  if (candidate.ethereum && typeof candidate.ethereum.request === 'function') {
+    return candidate.ethereum
+  }
+  return null
+}
+
 function getMiniPayProviderFromWindow() {
   if (typeof window === 'undefined') {
     return null
   }
   const global = window
-  if (global?.miniPay?.isMiniPay) {
-    return global.miniPay
+  const direct = normalizeProvider(global?.miniPay)
+  if (direct?.isMiniPay || global?.miniPay?.isMiniPay) {
+    return direct
   }
   const { ethereum } = global
   if (ethereum?.isMiniPay) {
-    return ethereum
+    return normalizeProvider(ethereum)
   }
   if (Array.isArray(ethereum?.providers)) {
-    return ethereum.providers.find((entry) => entry?.isMiniPay) || null
+    const mini = ethereum.providers.find((entry) => entry?.isMiniPay)
+    return normalizeProvider(mini)
   }
   return null
 }
@@ -1422,18 +1435,25 @@ function App() {
         return
       }
 
+      const eipProvider = normalizeProvider(activeProvider)
+      if (!eipProvider) {
+        showToast('Wallet provider not ready. Please reopen MiniPay or MetaMask.')
+        setStatus('idle')
+        return
+      }
+
       // Request account access
-      const accounts = await activeProvider.request({ method: 'eth_requestAccounts' })
+      const accounts = await eipProvider.request({ method: 'eth_requestAccounts' })
       if (!accounts || accounts.length === 0) {
         throw new Error('No accounts found. Please unlock your wallet.')
       }
 
       // Ensure we're on Celo Sepolia
-      const chainId = await ensureCeloChain(activeProvider)
+      const chainId = await ensureCeloChain(eipProvider)
 
       // Determine wallet type if not already set
       if (!walletType) {
-        walletType = activeProvider.isMiniPay || activeProvider === window.miniPay ? 'MiniPay' : 'MetaMask'
+        walletType = eipProvider.isMiniPay ? 'MiniPay' : 'MetaMask'
       }
       
       const walletAddress = accounts[0]
@@ -1442,7 +1462,7 @@ function App() {
         chainId,
         type: walletType,
       })
-      setProvider(activeProvider)
+      setProvider(eipProvider)
       setStatus('connected')
       
       // Load wallet-specific stats when wallet connects
@@ -1459,7 +1479,7 @@ function App() {
       // Initialize contract connection - USE PROVIDER (read-only) NOT SIGNER to prevent MetaMask popups
       if (VAULT_ADDRESS) {
         try {
-          const browserProvider = new BrowserProvider(activeProvider)
+          const browserProvider = new BrowserProvider(eipProvider)
           // Create contract WITHOUT signer for read-only operations (prevents MetaMask popups)
           // Signer will be created fresh when needed for transactions (claim, submitLesson, etc.)
           const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, browserProvider)
