@@ -1727,7 +1727,7 @@ function App() {
       
       // Always get a fresh signer from the current provider
       const browserProvider = new BrowserProvider(provider)
-      const signer = await browserProvider.getSigner()
+      const signer = await browserProvider.getSigner(wallet.address)
       const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
       
       // Record ALL pending rewards and current lesson BEFORE claiming
