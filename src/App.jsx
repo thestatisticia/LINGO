@@ -1727,7 +1727,15 @@ function App() {
       
       // Always get a fresh signer from the current provider
       const browserProvider = new BrowserProvider(provider)
-      const signer = await browserProvider.getSigner(wallet.address)
+      const providerIsMiniPay =
+        wallet.type === 'MiniPay' || provider?.isMiniPay || provider?.provider?.isMiniPay
+      const signer = providerIsMiniPay
+        ? await browserProvider.getSigner()
+        : await browserProvider.getSigner(wallet.address)
+      const signerAddress = await signer.getAddress()
+      if (signerAddress?.toLowerCase() !== wallet.address.toLowerCase()) {
+        console.warn('Signer address mismatch', { signerAddress, walletAddress: wallet.address })
+      }
       const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
       
       // Record ALL pending rewards and current lesson BEFORE claiming
