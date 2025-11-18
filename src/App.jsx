@@ -866,6 +866,17 @@ function App() {
       return `${address.slice(0, 6)}...${address.slice(-4)}`
     }
 
+    const handleCopyAddress = async () => {
+      if (!wallet.address) return
+      try {
+        await navigator.clipboard.writeText(wallet.address)
+        showToast('Wallet address copied')
+      } catch (error) {
+        console.error('Copy failed:', error)
+        showToast('Unable to copy address')
+      }
+    }
+
     return (
       <section id="wallet" className="single-screen-card wallet-screen">
         <div className="stat-card reward-card">
@@ -879,6 +890,16 @@ function App() {
               </>
             )}
           </small>
+          {wallet.address && (
+            <button
+              type="button"
+              className="ghost subtle"
+              onClick={handleCopyAddress}
+              style={{ alignSelf: 'flex-start' }}
+            >
+              Copy address
+            </button>
+          )}
           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
               className="secondary"
