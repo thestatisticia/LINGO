@@ -201,28 +201,6 @@ function App() {
       (entry) => entry.languageId === LANGUAGES[0].id && entry.level === LEVELS[0].id
     ) ?? MODULES_DATA[0]
 
-  // Safety check: ensure initialModule exists before accessing its properties
-  if (!initialModule || !initialModule.id) {
-    console.error('MODULES_DATA is empty or invalid. Cannot initialize app.')
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-        background: '#0a0a0f',
-        color: '#fefefe',
-        textAlign: 'center'
-      }}>
-        <div>
-          <h1>Configuration Error</h1>
-          <p>Unable to load modules. Please check the application configuration.</p>
-        </div>
-      </div>
-    )
-  }
-
   const [selectedLanguage, setSelectedLanguage] = useState(LANGUAGES[0].id)
   const [selectedLevel, setSelectedLevel] = useState(LEVELS[0].id)
   const [selectedLessonId, setSelectedLessonId] = useState(initialModule.id)
@@ -893,7 +871,7 @@ function App() {
               className="secondary"
               type="button"
               onClick={fetchTransactions}
-              disabled={loadingTransactions || !wallet.address}
+              disabled={loadingTransactions || !VAULT_ADDRESS}
             >
               {loadingTransactions ? 'Loading...' : 'Refresh History'}
             </button>
@@ -959,25 +937,22 @@ function App() {
                     </p>
                     <p style={{ margin: '0.3rem 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {tx.type === 'sent' 
-                        ? `To: ${formatAddress(tx.to)}` 
+                        ? `Contract → ${formatAddress(tx.to)}` 
                         : tx.type === 'received'
-                        ? `From: ${formatAddress(tx.from)}`
+                        ? `${formatAddress(tx.from)} → Contract`
                         : `${formatAddress(tx.from)} → ${formatAddress(tx.to)}`}
-                      {VAULT_ADDRESS && (
-                        (tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase() || 
-                         tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()) && (
-                          <span style={{ 
-                            display: 'inline-block', 
-                            marginLeft: '0.5rem',
-                            padding: '0.2rem 0.4rem',
-                            borderRadius: '4px',
-                            background: 'rgba(0, 224, 255, 0.2)',
-                            color: '#c5f3ff',
-                            fontSize: '0.7rem'
-                          }}>
-                            Contract
-                          </span>
-                        )
+                      {tx.involvesUserWallet && (
+                        <span style={{ 
+                          display: 'inline-block', 
+                          marginLeft: '0.5rem',
+                          padding: '0.2rem 0.4rem',
+                          borderRadius: '4px',
+                          background: 'rgba(0, 224, 255, 0.2)',
+                          color: '#c5f3ff',
+                          fontSize: '0.7rem'
+                        }}>
+                          Your wallet
+                        </span>
                       )}
                     </p>
                     <a
@@ -1003,9 +978,9 @@ function App() {
             </div>
           ) : (
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem 0' }}>
-              {wallet.address 
-                ? 'No transactions found. Complete lessons and claim rewards to see your transaction history.'
-                : 'Connect your wallet to view transaction history.'}
+              {VAULT_ADDRESS 
+                ? 'No contract transactions found. Complete lessons and claim rewards to see transaction history.'
+                : 'Contract address not configured.'}
             </p>
           )}
         </div>
@@ -1110,11 +1085,30 @@ function App() {
     window.addEventListener('error', handleError, true)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
     
+    // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
+    const miniPay = detectMiniPayProvider()
+    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
+    
+    let timer = null
+    if (miniPay && !wasDisconnected && !isConnected) {
+      // Small delay to ensure provider is fully ready
+      timer = setTimeout(() => {
+        connectWallet('minipay').catch((err) => {
+          console.log('Auto-connect skipped:', err.message)
+        })
+      }, 500)
+    }
+    
     return () => {
       // Clean up error handlers
       window.removeEventListener('error', handleError, true)
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+      // Clean up auto-connect timer
+      if (timer) {
+        clearTimeout(timer)
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -1239,7 +1233,6 @@ function App() {
       fetchWalletBalance()
     } else {
       setWalletBalance(0)
-      setTransactions([]) // Clear transactions when wallet disconnects
     }
   }, [provider, wallet.address])
 
@@ -1258,36 +1251,28 @@ function App() {
     return () => clearInterval(interval)
   }, [activeView, provider, wallet.address])
 
-  // Fetch transactions when wallet screen is opened or wallet address changes
+  // Fetch transactions when wallet screen is opened
   useEffect(() => {
-    if (activeView === 'wallet' && wallet.address && !loadingTransactions) {
-      try {
-        fetchTransactions()
-      } catch (error) {
-        console.error('Error in fetchTransactions useEffect:', error)
-      }
+    if (activeView === 'wallet' && VAULT_ADDRESS && !loadingTransactions) {
+      fetchTransactions()
     }
-  }, [activeView, wallet.address])
+  }, [activeView, VAULT_ADDRESS])
 
   // Refresh wallet balance after successful claim
   useEffect(() => {
     if (status === 'idle' && provider && wallet.address && activeView === 'wallet') {
       // Small delay to allow blockchain state to update
       const timer = setTimeout(() => {
-        try {
-          fetchWalletBalance()
-          fetchTransactions()
-        } catch (error) {
-          console.error('Error refreshing wallet data:', error)
-        }
+        fetchWalletBalance()
+        fetchTransactions()
       }, 2000)
       return () => clearTimeout(timer)
     }
   }, [status, provider, wallet.address, activeView])
 
+
   const detectMiniPayProvider = () => {
     try {
-      if (typeof window === 'undefined') return null
       const global = window
       if (!global) return null
       if (global.miniPay) return global.miniPay
@@ -1779,41 +1764,15 @@ function App() {
       
       // If contract has less than claimable, claim only what's available
       let tx
-      // MiniPay may need different gas handling - try without explicit gasLimit first
-      const isMiniPay = wallet.type === 'MiniPay'
-      const txOptions = isMiniPay 
-        ? {} // Let MiniPay handle gas estimation
-        : { gasLimit: 150000 } // Explicit gas for MetaMask
-      
       if (contractBalanceCELO >= currentClaimable) {
         // Contract has enough - claim all
         console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
-        try {
-          tx = await contract.claimAll(txOptions)
-        } catch (error) {
-          // If it fails, try with gas limit for MiniPay
-          if (isMiniPay && error.message?.includes('gas')) {
-            console.log('Retrying with gas limit for MiniPay...')
-            tx = await contract.claimAll({ gasLimit: 150000 })
-          } else {
-            throw error
-          }
-        }
+        tx = await contract.claimAll({ gasLimit: 150000 })
       } else {
         // Contract doesn't have enough - claim only what's available
         const amountWei = parseEther(claimableAmount.toFixed(6))
         console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
-        try {
-          tx = await contract.claim(amountWei, txOptions)
-        } catch (error) {
-          // If it fails, try with gas limit for MiniPay
-          if (isMiniPay && error.message?.includes('gas')) {
-            console.log('Retrying with gas limit for MiniPay...')
-            tx = await contract.claim(amountWei, { gasLimit: 150000 })
-          } else {
-            throw error
-          }
-        }
+        tx = await contract.claim(amountWei, { gasLimit: 150000 })
       }
       console.log('Claim transaction sent:', tx.hash)
       
@@ -1938,29 +1897,19 @@ function App() {
   }
 
   const fetchTransactions = async () => {
-    if (!wallet.address) {
-      setTransactions([])
-      return
-    }
+    if (!VAULT_ADDRESS) return
     setLoadingTransactions(true)
     try {
-      // Fetch transactions for the connected wallet address (not contract)
-      let txData = { status: '0', result: [] }
-      let internalTxData = { status: '0', result: [] }
+      // Fetch regular transactions, internal transactions, and token transfers
+      const [txResponse, internalTxResponse, tokenTxResponse] = await Promise.all([
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
+        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`)
+      ])
       
-      try {
-        const txResponse = await fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${wallet.address}&sort=desc&page=1&offset=20`)
-        txData = await txResponse.json()
-      } catch (err) {
-        console.error('Error fetching txlist:', err)
-      }
-      
-      try {
-        const internalTxResponse = await fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${wallet.address}&sort=desc&page=1&offset=20`)
-        internalTxData = await internalTxResponse.json()
-      } catch (err) {
-        console.error('Error fetching txlistinternal:', err)
-      }
+      const txData = await txResponse.json()
+      const internalTxData = await internalTxResponse.json()
+      const tokenTxData = await tokenTxResponse.json()
       
       // Create a map of internal transactions by hash
       const internalTxMap = new Map()
@@ -1976,70 +1925,86 @@ function App() {
         })
       }
       
+      // Create a map of token transfers (CELO native transfers) by hash
+      const tokenTxMap = new Map()
+      if (tokenTxData.status === '1' && tokenTxData.result && Array.isArray(tokenTxData.result)) {
+        tokenTxData.result.forEach((tokenTx) => {
+          const hash = tokenTx.hash || tokenTx.transactionHash
+          if (hash) {
+            if (!tokenTxMap.has(hash)) {
+              tokenTxMap.set(hash, [])
+            }
+            tokenTxMap.get(hash).push(tokenTx)
+          }
+        })
+      }
+      
       if (txData.status === '1' && txData.result && Array.isArray(txData.result)) {
-        const walletAddr = wallet.address.toLowerCase()
-        const contractAddr = VAULT_ADDRESS?.toLowerCase() || ''
+        // Fetch transaction details in parallel for transactions with zero value
+        const txHashesWithZeroValue = txData.result
+          .filter(tx => !tx.value || tx.value === '0')
+          .map(tx => tx.hash)
+          .slice(0, 10) // Limit to 10 to avoid too many requests
+        
+        const txDetailPromises = txHashesWithZeroValue.map(hash =>
+          fetch(`https://celo-sepolia.blockscout.com/api?module=proxy&action=eth_getTransactionByHash&txhash=${hash}`)
+            .then(r => r.json())
+            .then(data => ({ hash, data }))
+            .catch(() => ({ hash, data: null }))
+        )
+        
+        const txDetails = await Promise.all(txDetailPromises)
+        const txDetailMap = new Map()
+        txDetails.forEach(({ hash, data }) => {
+          if (data && data.result) {
+            txDetailMap.set(hash, data.result)
+          }
+        })
         
         const formattedTxs = txData.result.map((tx) => {
-          const txFrom = (tx.from || '').toLowerCase()
-          const txTo = (tx.to || '').toLowerCase()
-          const isFromWallet = txFrom === walletAddr
-          const isToWallet = txTo === walletAddr
-          const isToContract = contractAddr && txTo === contractAddr
-          const isFromContract = contractAddr && txFrom === contractAddr
-          
-          // Determine transaction type from wallet's perspective
-          let txType = 'unknown'
-          if (isFromWallet && isToContract) {
-            txType = 'sent' // Wallet sent to contract (funding or interaction)
-          } else if (isFromContract && isToWallet) {
-            txType = 'received' // Contract sent to wallet (claim)
-          } else if (isFromWallet) {
-            txType = 'sent' // Wallet sent to another address
-          } else if (isToWallet) {
-            txType = 'received' // Wallet received from another address
-          }
+          const isToContract = tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
+          const isFromContract = tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
+          const involvesUserWallet = wallet.address && (
+            tx.from?.toLowerCase() === wallet.address.toLowerCase() || 
+            tx.to?.toLowerCase() === wallet.address.toLowerCase()
+          )
           
           // Start with the main transaction value
-          let actualValue = 0
-          try {
-            actualValue = Number(formatEther(tx.value || '0'))
-          } catch (e) {
-            console.warn('Error parsing tx.value:', e)
-            actualValue = 0
-          }
+          let actualValue = Number(formatEther(tx.value || '0'))
           
           // Check internal transactions for this hash
           const internalTxs = internalTxMap.get(tx.hash)
           if (internalTxs && internalTxs.length > 0) {
             internalTxs.forEach((itx) => {
-              try {
-                const itxValue = Number(formatEther(itx.value || '0'))
-                const itxFrom = (itx.from || '').toLowerCase()
-                const itxTo = (itx.to || '').toLowerCase()
-                
-                // If wallet received CELO (from contract or other address)
-                if (itxTo === walletAddr && itxValue > 0) {
-                  actualValue = Math.max(actualValue, itxValue)
-                }
-                // If wallet sent CELO
-                if (itxFrom === walletAddr && itxValue > 0) {
-                  actualValue = Math.max(actualValue, itxValue)
-                }
-              } catch (e) {
-                console.warn('Error processing internal tx:', e)
+              const itxValue = Number(formatEther(itx.value || '0'))
+              const itxFrom = (itx.from || '').toLowerCase()
+              const itxTo = (itx.to || '').toLowerCase()
+              const contractAddr = VAULT_ADDRESS.toLowerCase()
+              
+              // Contract sending CELO (claim)
+              if (itxFrom === contractAddr && itxValue > 0) {
+                actualValue = Math.max(actualValue, itxValue)
+              }
+              // Contract receiving CELO (funding)
+              if (itxTo === contractAddr && itxValue > 0) {
+                actualValue = Math.max(actualValue, itxValue)
               }
             })
           }
           
+          // Check transaction detail if we fetched it
+          const txDetail = txDetailMap.get(tx.hash)
+          if (txDetail && txDetail.value) {
+            const detailValue = Number(formatEther(txDetail.value))
+            if (detailValue > 0) {
+              actualValue = Math.max(actualValue, detailValue)
+            }
+          }
+          
           // Use main transaction value if available
           if (tx.value && tx.value !== '0') {
-            try {
-              const mainTxValue = Number(formatEther(tx.value))
-              actualValue = Math.max(actualValue, mainTxValue)
-            } catch (e) {
-              console.warn('Error parsing main tx.value:', e)
-            }
+            const mainTxValue = Number(formatEther(tx.value))
+            actualValue = Math.max(actualValue, mainTxValue)
           }
           
           return {
@@ -2049,8 +2014,8 @@ function App() {
             value: actualValue,
             timestamp: parseInt(tx.timeStamp || '0', 10) * 1000,
             status: tx.txreceipt_status === '1' ? 'success' : 'failed',
-            type: txType,
-            involvesUserWallet: true, // All transactions are for this wallet
+            type: isToContract ? 'received' : isFromContract ? 'sent' : 'unknown',
+            involvesUserWallet,
           }
         })
         
@@ -2073,33 +2038,9 @@ function App() {
   // Rewards are only recorded when user explicitly clicks "Claim" button
   // This prevents automatic MetaMask popups and unwanted 10 CELO additions
 
-  const walletLabel = isConnected && wallet.address
+  const walletLabel = isConnected
     ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}`
     : 'Connect'
-
-  // Auto-connect to MiniPay if available and user hasn't explicitly disconnected
-  // This must be AFTER all function definitions
-  useEffect(() => {
-    const miniPay = detectMiniPayProvider()
-    const wasDisconnected = sessionStorage.getItem('wallet_disconnected') === 'true'
-    
-    let timer = null
-    if (miniPay && !wasDisconnected && !isConnected) {
-      // Small delay to ensure provider is fully ready
-      timer = setTimeout(() => {
-        connectWallet('minipay').catch((err) => {
-          console.log('Auto-connect skipped:', err.message)
-        })
-      }, 500)
-    }
-    
-    return () => {
-      if (timer) {
-        clearTimeout(timer)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const renderHero = () => (
     <header className="hero">
@@ -2110,11 +2051,6 @@ function App() {
       </div>
     </header>
   )
-
-  // Debug: Log render state
-  useEffect(() => {
-    console.log('App render state:', { isConnected, activeView, hasWallet: !!wallet.address })
-  }, [isConnected, activeView, wallet.address])
 
   const shell = (
     <div className="app-shell">
