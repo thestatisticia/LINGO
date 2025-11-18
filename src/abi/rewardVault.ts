@@ -1,6 +1,7 @@
 export const REWARD_VAULT_ABI = [
   'function submitLesson(uint256 xpGained, bytes32 proofId)',
   'function submitModule(bytes32 proofId)',
+  'function submitLessonsAndClaim(uint256[] xpValues, bytes32[] proofIds)',
   'function claim(uint256 amount)',
   'function claimAll()',
   'function learners(address) view returns (uint128 xp,uint128 claimable)',

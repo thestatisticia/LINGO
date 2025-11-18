@@ -228,6 +228,32 @@ function WalletIcon() {
   )
 }
 
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="8"
+        y="8"
+        width="12"
+        height="12"
+        rx="2"
+        ry="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M6 16V6h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function App() {
   const initialModule =
     MODULES_DATA.find(
@@ -290,11 +316,29 @@ function App() {
   const [weekBucket, setWeekBucket] = useState(() => getWeekBucket())
   const [rewardContract, setRewardContract] = useState(null)
   const [claimableOnChain, setClaimableOnChain] = useState(0)
+  const [supportsBatchClaim, setSupportsBatchClaim] = useState(true)
   const [reviewMode, setReviewMode] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [transactions, setTransactions] = useState([])
   const [loadingTransactions, setLoadingTransactions] = useState(false)
   const isConnected = Boolean(wallet.address)
+
+  const getRandomSeed = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  }
+
+  const createProofId = (moduleId, timestamp, salt = '') => {
+    const parts = [
+      wallet.address?.toLowerCase() || 'guest',
+      moduleId || 'lesson',
+      timestamp || Date.now(),
+      salt || getRandomSeed(),
+    ]
+    return id(parts.join(':'))
+  }
 
   // Store pending rewards in localStorage (per wallet)
   const getPendingRewards = () => {
@@ -302,7 +346,24 @@ function App() {
     try {
       const key = `pending_rewards_${wallet.address.toLowerCase()}`
       const stored = localStorage.getItem(key)
-      return stored ? JSON.parse(stored) : []
+      if (!stored) return []
+      const parsed = JSON.parse(stored)
+      let mutated = false
+      const normalized = parsed.map((reward, index) => {
+        if (reward?.proofId) {
+          return reward
+        }
+        mutated = true
+        const timestamp = reward?.timestamp || Date.now()
+        return {
+          ...reward,
+          proofId: createProofId(reward?.moduleId, timestamp, `legacy-${index}`),
+        }
+      })
+      if (mutated) {
+        localStorage.setItem(key, JSON.stringify(normalized))
+      }
+      return normalized
     } catch {
       return []
     }
@@ -313,11 +374,13 @@ function App() {
     try {
       const key = `pending_rewards_${wallet.address.toLowerCase()}`
       const pending = getPendingRewards()
+      const timestamp = Date.now()
       pending.push({
         xp: xpEarned,
         moduleId,
         isModuleComplete,
-        timestamp: Date.now()
+        timestamp,
+        proofId: createProofId(moduleId, timestamp),
       })
       localStorage.setItem(key, JSON.stringify(pending))
       console.log('Added pending reward:', { xp: xpEarned, moduleId, isModuleComplete })
@@ -400,7 +463,7 @@ function App() {
   // Calculate pending rewards total (ONLY lesson rewards, NO 10 CELO module bonus)
   const pendingRewards = getPendingRewards()
   const pendingRewardTotal = pendingRewards.reduce((sum, r) => {
-    const lessonReward = computeRewardFromXp(r.xp)
+    const lessonReward = computeRewardFromXp(Number(r.xp) || 0)
     // NO module completion bonus (10 CELO removed)
     return sum + lessonReward
   }, 0)
@@ -895,24 +958,34 @@ function App() {
         <div className="stat-card reward-card">
           <p className="eyebrow">Wallet Balance</p>
           <h3>{formatCelo(walletBalance)}</h3>
-          <small className="muted-line">
-            {wallet.address && (
-              <>
-                Address: {formatAddress(wallet.address)}<br />
-                Network: {wallet.type} · Celo Sepolia
-              </>
-            )}
-          </small>
           {wallet.address && (
-            <button
-              type="button"
-              className="ghost subtle"
-              onClick={handleCopyAddress}
-              style={{ alignSelf: 'flex-start' }}
-            >
-              Copy address
-            </button>
+            <div className="connected-wallet-row">
+              <button
+                type="button"
+                className="connected-wallet-chip"
+                onClick={handleWalletButtonClick}
+                disabled={status === 'connecting'}
+                title={wallet.address}
+                aria-label="Connected wallet"
+              >
+                <span>{walletLabel}</span>
+                {wallet.type && <span className="wallet-pill mini">{wallet.type}</span>}
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={handleCopyAddress}
+                aria-label="Copy wallet address"
+              >
+                <CopyIcon />
+              </button>
+            </div>
           )}
+          <small className="muted-line">
+            {wallet.address
+              ? `Network: ${wallet.type} · Celo Sepolia`
+              : 'Connect a wallet to view balances and history.'}
+          </small>
           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <button
               className="secondary"
@@ -930,16 +1003,17 @@ function App() {
             >
               {loadingTransactions ? 'Loading...' : 'Refresh History'}
             </button>
-            <button
-              type="button"
-              className="wallet-button compact"
-              onClick={handleWalletButtonClick}
-              disabled={status === 'connecting'}
-              title={wallet.address || 'Connect wallet'}
-            >
-              {status === 'connecting' ? 'Connecting…' : walletLabel}
-              {wallet.type && <span className="wallet-pill mini">{wallet.type}</span>}
-            </button>
+            {!wallet.address && (
+              <button
+                type="button"
+                className="wallet-button compact"
+                onClick={handleWalletButtonClick}
+                disabled={status === 'connecting'}
+                title="Connect wallet"
+              >
+                {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1484,6 +1558,7 @@ function App() {
           // Signer will be created fresh when needed for transactions (claim, submitLesson, etc.)
           const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, browserProvider)
           setRewardContract(contract)
+          setSupportsBatchClaim(true)
           
           // Fetch initial claimable balance (read-only, no signer needed, no MetaMask popup)
           try {
@@ -1499,11 +1574,13 @@ function App() {
           // Don't fail the connection if contract init fails
           setRewardContract(null)
           setClaimableOnChain(0)
+          setSupportsBatchClaim(false)
           showToast('Connected, but contract initialization failed. Some features may be limited.')
         }
       } else {
         setRewardContract(null)
         setClaimableOnChain(0)
+        setSupportsBatchClaim(false)
         console.warn('VITE_REWARD_VAULT_ADDRESS not set in environment variables')
       }
     } catch (error) {
@@ -1551,6 +1628,7 @@ function App() {
       setProvider(null)
       setRewardContract(null)
       setClaimableOnChain(0)
+      setSupportsBatchClaim(true)
       setWalletBalance(0)
       setTransactions([])
       setStatus('idle')
@@ -1694,14 +1772,38 @@ function App() {
   }
 
   const claimReward = async () => {
-    // Prevent multiple simultaneous calls
     if (isClaimingRef.current || status === 'claiming') {
       console.log('Claim already in progress, ignoring duplicate call')
       return
     }
-    
-    const payout = claimableBalance
-    if (!payout || payout <= 0) {
+
+    const storedPendingRewards = getPendingRewards()
+    const normalizedPending = storedPendingRewards
+      .map((reward, index) => {
+        const xpValue = Number(reward?.xp) || 0
+        if (!xpValue) return null
+        return {
+          xp: xpValue,
+          proofId: reward?.proofId || createProofId(reward?.moduleId, reward?.timestamp, `legacy-${index}`),
+        }
+      })
+      .filter(Boolean)
+
+    const includeSessionReward = normalizedPending.length === 0 && lastRunXp > 0
+    if (includeSessionReward) {
+      normalizedPending.push({
+        xp: lastRunXp,
+        proofId: createProofId(lesson?.id, Date.now(), 'session'),
+      })
+    }
+
+    const xpPayload = normalizedPending.map((entry) => entry.xp)
+    const proofPayload = normalizedPending.map((entry) => entry.proofId)
+    const projectedNewReward = xpPayload.reduce((sum, xpValue) => sum + computeRewardFromXp(xpValue), 0)
+    const expectedPayout = projectedNewReward + claimableOnChain
+    const hasRewardsToProcess = xpPayload.length > 0 || claimableOnChain > 0
+
+    if (!hasRewardsToProcess) {
       showToast('Complete language modules to earn XP and CELO rewards.')
       return
     }
@@ -1717,16 +1819,18 @@ function App() {
       showToast('Contract address not configured.')
       return
     }
-    
-    // CRITICAL: Set claiming status IMMEDIATELY to prevent duplicate calls
+
     isClaimingRef.current = true
     setStatus('claiming')
-    
+
+    let browserProvider
     try {
-      console.log('=== CLAIM START ===', { payout, address: wallet.address })
-      
-      // Always get a fresh signer from the current provider
-      const browserProvider = new BrowserProvider(provider)
+      browserProvider = new BrowserProvider(provider)
+      console.log('=== CLAIM START ===', {
+        address: wallet.address,
+        pendingCount: xpPayload.length,
+        expectedPayout,
+      })
       const providerIsMiniPay =
         wallet.type === 'MiniPay' || provider?.isMiniPay || provider?.provider?.isMiniPay
       const signer = providerIsMiniPay
@@ -1737,184 +1841,193 @@ function App() {
         console.warn('Signer address mismatch', { signerAddress, walletAddress: wallet.address })
       }
       const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
-      
-      // Record ALL pending rewards and current lesson BEFORE claiming
-      // This ensures rewards are in the vault before we try to claim
-      const pending = getPendingRewards()
-      const hasCurrentLesson = lastRunXp > 0
-      const totalToRecord = pending.length + (hasCurrentLesson ? 1 : 0)
-      
-      if (totalToRecord > 0) {
+
+      const tryConsolidatedClaim = async () => {
+        if (!supportsBatchClaim) return 'skip'
         try {
-          console.log('Recording', totalToRecord, 'reward(s) to vault before claim...')
-          showToast(`Recording ${totalToRecord} reward(s)...`)
-          
-          // Record all pending rewards first
-          if (pending.length > 0) {
-            for (const reward of pending) {
-              // ONLY record lesson reward, NEVER call submitModule (no 10 CELO)
-              const lessonProof = id(`${reward.moduleId || 'lesson'}-${reward.timestamp}-${Math.random()}`)
-              const lessonTx = await contract.submitLesson(reward.xp, lessonProof)
-              await lessonTx.wait()
-              console.log('Recorded pending reward:', reward.xp, 'XP (NO 10 CELO)')
-            }
-            clearPendingRewards()
+          console.log('Attempting consolidated claim', {
+            lessons: xpPayload.length,
+            expectedPayout,
+          })
+          const tx = await contract.submitLessonsAndClaim(xpPayload, proofPayload, { gasLimit: 650000 })
+          showToast('Submitting reward claim...')
+          const receipt = await tx.wait()
+          console.log('Consolidated claim confirmed:', receipt)
+          clearPendingRewards()
+          setLastRunXp(0)
+          await refreshOnchainClaimable(contract, wallet.address)
+          setClaimableOnChain(0)
+          await fetchWalletBalance()
+          if (activeView === 'wallet') {
+            await fetchTransactions()
           }
-          
-          // Record current lesson if it exists
-          if (hasCurrentLesson) {
-            const lessonProof = id(`${lesson?.id || 'lesson'}-${Date.now()}-${Math.random()}`)
-            const lessonTx = await contract.submitLesson(lastRunXp, lessonProof)
+          showToast(`Success! ${formatCelo(expectedPayout)} sent to your ${wallet.type} wallet.`)
+          console.log('=== CLAIM COMPLETE ===')
+          return 'success'
+        } catch (error) {
+          const message =
+            error?.shortMessage ||
+            error?.info?.error?.message ||
+            error?.message ||
+            ''
+          if (message.toLowerCase().includes('function selector was not recognized')) {
+            setSupportsBatchClaim(false)
+            console.warn('submitLessonsAndClaim unsupported on this vault, falling back.')
+            return 'fallback'
+          }
+          throw error
+        }
+      }
+
+      const batchResult = await tryConsolidatedClaim()
+      if (batchResult === 'success') {
+        return
+      }
+
+      if (xpPayload.length > 0) {
+        try {
+          console.log('Recording', xpPayload.length, 'reward(s) to vault before claim...')
+          showToast(`Recording ${xpPayload.length} reward(s)...`)
+          for (const reward of normalizedPending) {
+            const lessonTx = await contract.submitLesson(reward.xp, reward.proofId)
             await lessonTx.wait()
-            console.log('Recorded current lesson reward:', lastRunXp, 'XP (NO 10 CELO)')
-            setLastRunXp(0) // Clear after recording
+            console.log('Recorded pending reward:', reward.xp, 'XP (NO module bonus)')
           }
-          
-          // Wait a moment for blockchain state to update
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          
-          // Refresh balance after recording
-          const updatedInfo = await contract.learners(wallet.address)
-          const updatedClaimable = Number(formatEther(updatedInfo.claimable))
-          setClaimableOnChain(updatedClaimable)
-          console.log('Balance after recording:', updatedClaimable, 'CELO')
+          clearPendingRewards()
+          setLastRunXp(0)
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          await refreshOnchainClaimable(contract, wallet.address)
+          console.log('Balance after recording pending rewards refreshed')
         } catch (err) {
           console.error('Failed to record rewards:', err)
           showToast('Warning: Could not record rewards. Claiming existing balance.')
-          // Continue with claim even if recording fails
         }
       }
-      
-      // Check current claimable balance from contract (after recording)
+
       const currentInfo = await contract.learners(wallet.address)
       const currentClaimable = Number(formatEther(currentInfo.claimable))
       console.log('Current claimable balance from contract:', currentClaimable, 'CELO')
-      
+
       if (currentClaimable <= 0) {
         showToast('No rewards available. Complete more modules to earn XP and CELO.')
-        isClaimingRef.current = false
-        setStatus('idle')
         setClaimableOnChain(0)
         return
       }
-      
-      // Check contract's CELO balance
+
       const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
       const contractBalanceCELO = Number(formatEther(contractBalance))
       console.log('Contract CELO balance:', contractBalanceCELO, 'CELO')
-      
-      // Get wallet balance before claim
+
       const walletBalanceBefore = await browserProvider.getBalance(wallet.address)
       const walletBalanceBeforeCELO = Number(formatEther(walletBalanceBefore))
       console.log('Wallet balance before claim:', walletBalanceBeforeCELO, 'CELO')
-      
-      // Determine how much we can actually claim (limited by contract balance)
+
       const claimableAmount = Math.min(currentClaimable, contractBalanceCELO)
-      
+
       if (claimableAmount <= 0) {
         showToast('No rewards available to claim.')
-        setStatus('idle')
-        setClaimableOnChain(0)
+        setClaimableOnChain(currentClaimable)
         return
       }
-      
+
       if (contractBalanceCELO < currentClaimable) {
         const shortfall = currentClaimable - contractBalanceCELO
-        showToast(`Claiming ${formatCelo(claimableAmount)} (contract has ${contractBalanceCELO.toFixed(2)} CELO, you have ${currentClaimable.toFixed(2)} claimable). Fund contract with ${shortfall.toFixed(2)} more CELO to claim full amount.`)
+        showToast(
+          `Claiming ${formatCelo(claimableAmount)} (contract has ${contractBalanceCELO.toFixed(
+            2
+          )} CELO, you have ${currentClaimable.toFixed(2)} claimable). Fund contract with ${shortfall.toFixed(
+            2
+          )} more CELO to claim full amount.`
+        )
       } else {
         showToast(`Claiming ${formatCelo(claimableAmount)}...`)
       }
-      
-      // If contract has less than claimable, claim only what's available
+
       let tx
       if (contractBalanceCELO >= currentClaimable) {
-        // Contract has enough - claim all
         console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
-            tx = await contract.claimAll({ gasLimit: 150000 })
+        tx = await contract.claimAll({ gasLimit: 150000 })
       } else {
-        // Contract doesn't have enough - claim only what's available
         const amountWei = parseEther(claimableAmount.toFixed(6))
         console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
-            tx = await contract.claim(amountWei, { gasLimit: 150000 })
+        tx = await contract.claim(amountWei, { gasLimit: 150000 })
       }
       console.log('Claim transaction sent:', tx.hash)
-      
+
       showToast('Transaction submitted. Waiting for confirmation...')
       const receipt = await tx.wait()
       console.log('Transaction confirmed:', receipt)
-      
-      // Verify the transaction was successful
+
       if (receipt.status !== 1) {
         throw new Error('Transaction failed - status: ' + receipt.status)
       }
-      
-      // Wait for blockchain state to update
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      
-      // Verify wallet received CELO
+
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+
       const walletBalanceAfter = await browserProvider.getBalance(wallet.address)
       const walletBalanceAfterCELO = Number(formatEther(walletBalanceAfter))
       const received = walletBalanceAfterCELO - walletBalanceBeforeCELO
       console.log('Wallet balance after claim:', walletBalanceAfterCELO, 'CELO')
       console.log('CELO received:', received, 'CELO')
-      
-      // Refresh claimable balance - should be ZERO after claimAll
+
       const updatedInfo = await contract.learners(wallet.address)
       const updatedClaimable = Number(formatEther(updatedInfo.claimable))
       console.log('Claimable balance after claim:', updatedClaimable, 'CELO (should be 0)')
-      
-      // Set balance to what contract says
+
       setClaimableOnChain(updatedClaimable)
-      
+
       if (updatedClaimable > 0) {
         console.warn('WARNING: Balance is not zero after claimAll!', updatedClaimable)
-        // Try one more refresh
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        await new Promise((resolve) => setTimeout(resolve, 2000))
         const finalInfo = await contract.learners(wallet.address)
         const finalClaimable = Number(formatEther(finalInfo.claimable))
         setClaimableOnChain(finalClaimable)
         console.log('Final claimable balance:', finalClaimable, 'CELO')
       }
-      
+
       showToast(`Success! ${formatCelo(claimableAmount)} sent to your ${wallet.type} wallet.`)
-      
-      // Clear local values
+
       setLastRunXp(0)
-      
-      // Refresh wallet balance after successful claim
+
       await fetchWalletBalance()
       if (activeView === 'wallet') {
         await fetchTransactions()
       }
-      
+
       console.log('=== CLAIM COMPLETE ===')
     } catch (error) {
       console.error('Claim error:', error)
-      const errorMsg = error?.shortMessage || error?.message || error?.reason || String(error) || 'Claim failed'
-      
+      const errorMsg =
+        error?.shortMessage || error?.message || error?.reason || String(error) || 'Claim failed'
+
       if (errorMsg.includes('User rejected') || errorMsg.includes('denied') || errorMsg.includes('user rejected') || errorMsg.includes('rejected')) {
         showToast('Claim cancelled by user')
-      } else if (errorMsg.includes('insufficient') || errorMsg.includes('transfer failed') || errorMsg.includes('reverted')) {
-        // Check if it's a contract balance issue
+      } else if (
+        errorMsg.includes('insufficient') ||
+        errorMsg.includes('transfer failed') ||
+        errorMsg.includes('reverted')
+      ) {
         try {
-          const browserProvider = new BrowserProvider(provider)
-          const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
-          const contractBalanceCELO = Number(formatEther(contractBalance))
-          if (contractBalanceCELO < payout) {
-            showToast(`Contract needs funding! Send CELO to: ${VAULT_ADDRESS}`)
+          if (browserProvider) {
+            const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
+            const contractBalanceCELO = Number(formatEther(contractBalance))
+            if (contractBalanceCELO < (expectedPayout || claimableOnChain)) {
+              showToast(`Contract needs funding! Send CELO to: ${VAULT_ADDRESS}`)
+            } else {
+              showToast('Insufficient claimable balance or contract funds')
+            }
           } else {
             showToast('Insufficient claimable balance or contract funds')
           }
         } catch (e) {
           showToast('Claim failed: Contract may need funding or insufficient balance')
         }
-        // Refresh balance to show actual amount
         if (provider && VAULT_ADDRESS) {
           try {
-            const browserProvider = new BrowserProvider(provider)
-            const signer = await browserProvider.getSigner()
-            const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
-            await refreshOnchainClaimable(contract, wallet.address)
+            const refreshProvider = new BrowserProvider(provider)
+            const refreshSigner = await refreshProvider.getSigner()
+            const refreshContract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, refreshSigner)
+            await refreshOnchainClaimable(refreshContract, wallet.address)
           } catch (e) {
             console.error('Error refreshing after claim failure:', e)
           }
@@ -1925,7 +2038,6 @@ function App() {
         showToast(`Claim failed: ${errorMsg}`)
       }
     } finally {
-      // Always reset status after claim attempt
       isClaimingRef.current = false
       setStatus('idle')
       console.log('Claim process ended, status reset to idle')

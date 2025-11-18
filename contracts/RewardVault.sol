@@ -49,6 +49,37 @@ contract RewardVault is Ownable, ReentrancyGuard {
     emit ModuleSubmitted(msg.sender, 10 ether);
   }
 
+  function submitLessonsAndClaim(uint256[] calldata xpValues, bytes32[] calldata proofIds) external nonReentrant {
+    require(xpValues.length == proofIds.length, 'length mismatch');
+    LearnerInfo storage info = learners[msg.sender];
+    uint256 totalReward;
+    uint256 totalXp;
+
+    for (uint256 i = 0; i < xpValues.length; i++) {
+      bytes32 proofId = proofIds[i];
+      require(!processedProofs[proofId], 'proof used');
+      processedProofs[proofId] = true;
+      uint256 xpGained = xpValues[i];
+      uint256 reward = xpGained >= 100 ? 1 ether : (xpGained * 1e16);
+      if (reward > 1 ether) reward = 1 ether;
+      totalReward += reward;
+      totalXp += xpGained;
+      emit LessonSubmitted(msg.sender, xpGained, reward);
+    }
+
+    if (totalXp > 0) {
+      info.xp += uint128(totalXp);
+      info.claimable += uint128(totalReward);
+    }
+
+    uint256 payout = uint256(info.claimable);
+    require(payout > 0, 'nothing to claim');
+    info.claimable = 0;
+    (bool ok, ) = msg.sender.call{value: payout}('');
+    require(ok, 'transfer failed');
+    emit RewardClaimed(msg.sender, payout);
+  }
+
   function claim(uint256 amount) external nonReentrant {
     LearnerInfo storage info = learners[msg.sender];
     require(info.claimable >= amount, 'insufficient balance');
