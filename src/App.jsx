@@ -201,6 +201,28 @@ function App() {
       (entry) => entry.languageId === LANGUAGES[0].id && entry.level === LEVELS[0].id
     ) ?? MODULES_DATA[0]
 
+  // Safety check: ensure initialModule exists before accessing its properties
+  if (!initialModule || !initialModule.id) {
+    console.error('MODULES_DATA is empty or invalid. Cannot initialize app.')
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
+        background: '#0a0a0f',
+        color: '#fefefe',
+        textAlign: 'center'
+      }}>
+        <div>
+          <h1>Configuration Error</h1>
+          <p>Unable to load modules. Please check the application configuration.</p>
+        </div>
+      </div>
+    )
+  }
+
   const [selectedLanguage, setSelectedLanguage] = useState(LANGUAGES[0].id)
   const [selectedLevel, setSelectedLevel] = useState(LEVELS[0].id)
   const [selectedLessonId, setSelectedLessonId] = useState(initialModule.id)
@@ -2088,6 +2110,11 @@ function App() {
       </div>
     </header>
   )
+
+  // Debug: Log render state
+  useEffect(() => {
+    console.log('App render state:', { isConnected, activeView, hasWallet: !!wallet.address })
+  }, [isConnected, activeView, wallet.address])
 
   const shell = (
     <div className="app-shell">
