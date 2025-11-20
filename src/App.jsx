@@ -18,9 +18,10 @@ const VAULT_ADDRESS = import.meta.env.VITE_REWARD_VAULT_ADDRESS || ''
 const formatCelo = (value = 0) => `${value.toFixed(2)} CELO`
 const HERO_COPY = {
   home: {
-    eyebrow: 'Mini-Lingua',
-    title: 'Incentivized language learning.',
-    subtitle: 'Earn XP, CELO rewards, and NFTs as you master new languages. Learn, earn, level up.',
+    eyebrow: 'LINGO',
+    tagline: 'Learn. Earn. Repeat.',
+    title: 'Translate Languages Knowledge to Crypto Rewards',
+    subtitle: 'Earn CELO tokens and collect exclusive NFTs as I achieve language fluency. The blockchain-powered way to connect globally.',
   },
   learn: {
     eyebrow: 'Learn & earn',
@@ -316,7 +317,7 @@ function App() {
   const [weekBucket, setWeekBucket] = useState(() => getWeekBucket())
   const [rewardContract, setRewardContract] = useState(null)
   const [claimableOnChain, setClaimableOnChain] = useState(0)
-  const [supportsBatchClaim, setSupportsBatchClaim] = useState(true)
+  const [supportsBatchClaim, setSupportsBatchClaim] = useState(null)
   const [reviewMode, setReviewMode] = useState(false)
   const [walletBalance, setWalletBalance] = useState(0)
   const [transactions, setTransactions] = useState([])
@@ -330,14 +331,54 @@ function App() {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
   }
 
-  const createProofId = (moduleId, timestamp, salt = '') => {
+  const createProofId = (moduleId, timestamp, salt = '', addressOverride) => {
+    const sourceAddress = (addressOverride || wallet.address || 'guest').toLowerCase()
     const parts = [
-      wallet.address?.toLowerCase() || 'guest',
+      sourceAddress,
       moduleId || 'lesson',
       timestamp || Date.now(),
       salt || getRandomSeed(),
     ]
     return id(parts.join(':'))
+  }
+
+  const getErrorMessage = (error) => {
+    if (!error) return ''
+    return (
+      error.shortMessage ||
+      error.info?.error?.message ||
+      error.message ||
+      error.reason ||
+      ''
+    )
+  }
+
+  const isSelectorMissingError = (error) => {
+    const message = getErrorMessage(error).toLowerCase()
+    if (message.includes('function selector was not recognized')) return true
+    if (message.includes('missing revert data')) return true
+    if (message.includes('call exception') && !message.includes('nothing to claim')) {
+      const dataField = error?.data ?? error?.info?.error?.data ?? ''
+      if (!dataField || dataField === '0x') {
+        return true
+      }
+    }
+    return false
+  }
+
+  const probeBatchClaimSupport = async (contractInstance, learnerAddress) => {
+    if (!contractInstance || !learnerAddress) return false
+    try {
+      const probeProof = createProofId('probe', Date.now(), `probe-${Math.random()}`, learnerAddress)
+      await contractInstance.submitLessonsAndClaim.staticCall([1], [probeProof])
+      return true
+    } catch (error) {
+      if (isSelectorMissingError(error)) {
+        return false
+      }
+      console.warn('Batch claim probe failed unexpectedly:', error)
+      return false
+    }
   }
 
   // Store pending rewards in localStorage (per wallet)
@@ -958,10 +999,10 @@ function App() {
         <div className="stat-card reward-card">
           <p className="eyebrow">Wallet Balance</p>
           <h3>{formatCelo(walletBalance)}</h3>
-          {wallet.address && (
+            {wallet.address && (
             <div className="connected-wallet-row">
-              <button
-                type="button"
+            <button
+              type="button"
                 className="connected-wallet-chip"
                 onClick={handleWalletButtonClick}
                 disabled={status === 'connecting'}
@@ -974,11 +1015,11 @@ function App() {
               <button
                 type="button"
                 className="icon-button"
-                onClick={handleCopyAddress}
+              onClick={handleCopyAddress}
                 aria-label="Copy wallet address"
-              >
+            >
                 <CopyIcon />
-              </button>
+            </button>
             </div>
           )}
           <small className="muted-line">
@@ -1004,15 +1045,15 @@ function App() {
               {loadingTransactions ? 'Loading...' : 'Refresh History'}
             </button>
             {!wallet.address && (
-              <button
-                type="button"
-                className="wallet-button compact"
-                onClick={handleWalletButtonClick}
-                disabled={status === 'connecting'}
+            <button
+              type="button"
+              className="wallet-button compact"
+              onClick={handleWalletButtonClick}
+              disabled={status === 'connecting'}
                 title="Connect wallet"
-              >
+            >
                 {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
-              </button>
+            </button>
             )}
           </div>
         </div>
@@ -1120,29 +1161,33 @@ function App() {
   const renderLanding = () => {
     const landingCopy = HERO_COPY.home
     return (
-      <section className="single-screen-card landing-card">
+      <section className="landing-card">
         <div className="landing-content">
-          <p className="eyebrow">{landingCopy.eyebrow}</p>
-          <h1>
-            {landingCopy.title.split(' ').map((word, idx) => {
-              const cleanWord = word.replace(/[.,]/g, '')
-              const isEmphasized = cleanWord === 'quests' || cleanWord === 'loot'
-              const displayWord = word
-              return isEmphasized ? <em key={idx}>{displayWord} </em> : <span key={idx}>{displayWord} </span>
-            })}
-          </h1>
-          <p className="landing-note">{landingCopy.subtitle}</p>
-        </div>
-        <div className="landing-actions">
-          <button
-            type="button"
-            className="wallet-button big"
-            onClick={() => connectWallet('auto')}
-            disabled={status === 'connecting'}
-          >
-            {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
-          </button>
-          {toast && <div className="toast inline">{toast}</div>}
+          <div className="landing-brand">
+            <h1 className="landing-logo">{landingCopy.eyebrow}</h1>
+            <img 
+              src="/Capture12.PNG" 
+              alt="LINGO Logo" 
+              className="landing-logo-image"
+            />
+            {landingCopy.tagline && <p className="landing-tagline">{landingCopy.tagline}</p>}
+          </div>
+          
+          <div className="landing-main">
+            <h2 className="landing-headline">{landingCopy.title}</h2>
+          </div>
+
+          <div className="landing-cta">
+            <button
+              type="button"
+              className="wallet-button landing-connect"
+              onClick={() => connectWallet('auto')}
+              disabled={status === 'connecting'}
+            >
+              {status === 'connecting' ? 'Connecting…' : 'Connect wallet'}
+            </button>
+            {toast && <div className="toast inline">{toast}</div>}
+          </div>
         </div>
       </section>
     )
@@ -1558,7 +1603,13 @@ function App() {
           // Signer will be created fresh when needed for transactions (claim, submitLesson, etc.)
           const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, browserProvider)
           setRewardContract(contract)
-          setSupportsBatchClaim(true)
+          try {
+            const hasBatchSupport = await probeBatchClaimSupport(contract, walletAddress)
+            setSupportsBatchClaim(hasBatchSupport)
+          } catch (probeError) {
+            console.warn('Could not verify batch-claim support:', probeError)
+            setSupportsBatchClaim(false)
+          }
           
           // Fetch initial claimable balance (read-only, no signer needed, no MetaMask popup)
           try {
@@ -1628,7 +1679,7 @@ function App() {
       setProvider(null)
       setRewardContract(null)
       setClaimableOnChain(0)
-      setSupportsBatchClaim(true)
+      setSupportsBatchClaim(null)
       setWalletBalance(0)
       setTransactions([])
       setStatus('idle')
@@ -1776,7 +1827,7 @@ function App() {
       console.log('Claim already in progress, ignoring duplicate call')
       return
     }
-
+    
     const storedPendingRewards = getPendingRewards()
     const normalizedPending = storedPendingRewards
       .map((reward, index) => {
@@ -1819,10 +1870,10 @@ function App() {
       showToast('Contract address not configured.')
       return
     }
-
+    
     isClaimingRef.current = true
     setStatus('claiming')
-
+    
     let browserProvider
     try {
       browserProvider = new BrowserProvider(provider)
@@ -1841,9 +1892,28 @@ function App() {
         console.warn('Signer address mismatch', { signerAddress, walletAddress: wallet.address })
       }
       const contract = new Contract(VAULT_ADDRESS, REWARD_VAULT_ABI, signer)
-
+      
       const tryConsolidatedClaim = async () => {
-        if (!supportsBatchClaim) return 'skip'
+        // If we know it's not supported, skip immediately
+        if (supportsBatchClaim === false) return 'skip'
+        
+        // Try staticCall first to verify support (even if supportsBatchClaim is null)
+        try {
+          await contract.submitLessonsAndClaim.staticCall(xpPayload, proofPayload, { gasLimit: 650000 })
+          // If staticCall succeeds, mark as supported
+          if (supportsBatchClaim !== true) {
+            setSupportsBatchClaim(true)
+            console.log('Batch claim support confirmed via staticCall')
+          }
+        } catch (error) {
+          if (isSelectorMissingError(error)) {
+            setSupportsBatchClaim(false)
+            console.warn('submitLessonsAndClaim not available on this vault. Using fallback flow.')
+            return 'fallback-unsupported'
+          }
+          throw error
+        }
+
         try {
           console.log('Attempting consolidated claim', {
             lessons: xpPayload.length,
@@ -1853,7 +1923,7 @@ function App() {
           showToast('Submitting reward claim...')
           const receipt = await tx.wait()
           console.log('Consolidated claim confirmed:', receipt)
-          clearPendingRewards()
+            clearPendingRewards()
           setLastRunXp(0)
           await refreshOnchainClaimable(contract, wallet.address)
           setClaimableOnChain(0)
@@ -1865,15 +1935,10 @@ function App() {
           console.log('=== CLAIM COMPLETE ===')
           return 'success'
         } catch (error) {
-          const message =
-            error?.shortMessage ||
-            error?.info?.error?.message ||
-            error?.message ||
-            ''
-          if (message.toLowerCase().includes('function selector was not recognized')) {
+          if (isSelectorMissingError(error)) {
             setSupportsBatchClaim(false)
-            console.warn('submitLessonsAndClaim unsupported on this vault, falling back.')
-            return 'fallback'
+            console.warn('submitLessonsAndClaim unsupported on this vault at runtime. Falling back.')
+            return 'fallback-unsupported'
           }
           throw error
         }
@@ -1882,6 +1947,10 @@ function App() {
       const batchResult = await tryConsolidatedClaim()
       if (batchResult === 'success') {
         return
+      }
+
+      if (batchResult === 'fallback-unsupported') {
+        showToast('Single-click claim requires the latest vault. Using legacy flow...')
       }
 
       if (xpPayload.length > 0) {
@@ -1903,33 +1972,33 @@ function App() {
           showToast('Warning: Could not record rewards. Claiming existing balance.')
         }
       }
-
+      
       const currentInfo = await contract.learners(wallet.address)
       const currentClaimable = Number(formatEther(currentInfo.claimable))
       console.log('Current claimable balance from contract:', currentClaimable, 'CELO')
-
+      
       if (currentClaimable <= 0) {
         showToast('No rewards available. Complete more modules to earn XP and CELO.')
         setClaimableOnChain(0)
         return
       }
-
+      
       const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
       const contractBalanceCELO = Number(formatEther(contractBalance))
       console.log('Contract CELO balance:', contractBalanceCELO, 'CELO')
-
+      
       const walletBalanceBefore = await browserProvider.getBalance(wallet.address)
       const walletBalanceBeforeCELO = Number(formatEther(walletBalanceBefore))
       console.log('Wallet balance before claim:', walletBalanceBeforeCELO, 'CELO')
-
+      
       const claimableAmount = Math.min(currentClaimable, contractBalanceCELO)
-
+      
       if (claimableAmount <= 0) {
         showToast('No rewards available to claim.')
         setClaimableOnChain(currentClaimable)
         return
       }
-
+      
       if (contractBalanceCELO < currentClaimable) {
         const shortfall = currentClaimable - contractBalanceCELO
         showToast(
@@ -1942,40 +2011,40 @@ function App() {
       } else {
         showToast(`Claiming ${formatCelo(claimableAmount)}...`)
       }
-
+      
       let tx
       if (contractBalanceCELO >= currentClaimable) {
         console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
-        tx = await contract.claimAll({ gasLimit: 150000 })
+            tx = await contract.claimAll({ gasLimit: 150000 })
       } else {
         const amountWei = parseEther(claimableAmount.toFixed(6))
         console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
-        tx = await contract.claim(amountWei, { gasLimit: 150000 })
+            tx = await contract.claim(amountWei, { gasLimit: 150000 })
       }
       console.log('Claim transaction sent:', tx.hash)
-
+      
       showToast('Transaction submitted. Waiting for confirmation...')
       const receipt = await tx.wait()
       console.log('Transaction confirmed:', receipt)
-
+      
       if (receipt.status !== 1) {
         throw new Error('Transaction failed - status: ' + receipt.status)
       }
-
+      
       await new Promise((resolve) => setTimeout(resolve, 3000))
-
+      
       const walletBalanceAfter = await browserProvider.getBalance(wallet.address)
       const walletBalanceAfterCELO = Number(formatEther(walletBalanceAfter))
       const received = walletBalanceAfterCELO - walletBalanceBeforeCELO
       console.log('Wallet balance after claim:', walletBalanceAfterCELO, 'CELO')
       console.log('CELO received:', received, 'CELO')
-
+      
       const updatedInfo = await contract.learners(wallet.address)
       const updatedClaimable = Number(formatEther(updatedInfo.claimable))
       console.log('Claimable balance after claim:', updatedClaimable, 'CELO (should be 0)')
-
+      
       setClaimableOnChain(updatedClaimable)
-
+      
       if (updatedClaimable > 0) {
         console.warn('WARNING: Balance is not zero after claimAll!', updatedClaimable)
         await new Promise((resolve) => setTimeout(resolve, 2000))
@@ -1984,22 +2053,22 @@ function App() {
         setClaimableOnChain(finalClaimable)
         console.log('Final claimable balance:', finalClaimable, 'CELO')
       }
-
+      
       showToast(`Success! ${formatCelo(claimableAmount)} sent to your ${wallet.type} wallet.`)
-
+      
       setLastRunXp(0)
-
+      
       await fetchWalletBalance()
       if (activeView === 'wallet') {
         await fetchTransactions()
       }
-
+      
       console.log('=== CLAIM COMPLETE ===')
     } catch (error) {
       console.error('Claim error:', error)
       const errorMsg =
         error?.shortMessage || error?.message || error?.reason || String(error) || 'Claim failed'
-
+      
       if (errorMsg.includes('User rejected') || errorMsg.includes('denied') || errorMsg.includes('user rejected') || errorMsg.includes('rejected')) {
         showToast('Claim cancelled by user')
       } else if (
@@ -2009,10 +2078,10 @@ function App() {
       ) {
         try {
           if (browserProvider) {
-            const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
-            const contractBalanceCELO = Number(formatEther(contractBalance))
+          const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
+          const contractBalanceCELO = Number(formatEther(contractBalance))
             if (contractBalanceCELO < (expectedPayout || claimableOnChain)) {
-              showToast(`Contract needs funding! Send CELO to: ${VAULT_ADDRESS}`)
+            showToast(`Contract needs funding! Send CELO to: ${VAULT_ADDRESS}`)
             } else {
               showToast('Insufficient claimable balance or contract funds')
             }
@@ -2075,16 +2144,38 @@ function App() {
     if (!VAULT_ADDRESS) return
     setLoadingTransactions(true)
     try {
+      const fetchBlockscoutJson = async (url, label) => {
+        try {
+          const response = await fetch(url)
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+          return await response.json()
+        } catch (error) {
+          console.warn(`Blockscout ${label ?? 'request'} failed`, { url, error })
+          return null
+        }
+      }
+
       // Fetch regular transactions, internal transactions, and token transfers
-      const [txResponse, internalTxResponse, tokenTxResponse] = await Promise.all([
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`),
-        fetch(`https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`)
+      const [txDataRaw, internalTxDataRaw, tokenTxDataRaw] = await Promise.all([
+        fetchBlockscoutJson(
+          `https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
+          'txlist'
+        ),
+        fetchBlockscoutJson(
+          `https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
+          'txlistinternal'
+        ),
+        fetchBlockscoutJson(
+          `https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
+          'tokentx'
+        ),
       ])
-      
-      const txData = await txResponse.json()
-      const internalTxData = await internalTxResponse.json()
-      const tokenTxData = await tokenTxResponse.json()
+
+      const txData = txDataRaw ?? { status: '0', result: [] }
+      const internalTxData = internalTxDataRaw ?? { status: '0', result: [] }
+      const tokenTxData = tokenTxDataRaw ?? { status: '0', result: [] }
       
       // Create a map of internal transactions by hash
       const internalTxMap = new Map()
@@ -2115,26 +2206,7 @@ function App() {
       }
       
       if (txData.status === '1' && txData.result && Array.isArray(txData.result)) {
-        // Fetch transaction details in parallel for transactions with zero value
-        const txHashesWithZeroValue = txData.result
-          .filter(tx => !tx.value || tx.value === '0')
-          .map(tx => tx.hash)
-          .slice(0, 10) // Limit to 10 to avoid too many requests
-        
-        const txDetailPromises = txHashesWithZeroValue.map(hash =>
-          fetch(`https://celo-sepolia.blockscout.com/api?module=proxy&action=eth_getTransactionByHash&txhash=${hash}`)
-            .then(r => r.json())
-            .then(data => ({ hash, data }))
-            .catch(() => ({ hash, data: null }))
-        )
-        
-        const txDetails = await Promise.all(txDetailPromises)
         const txDetailMap = new Map()
-        txDetails.forEach(({ hash, data }) => {
-          if (data && data.result) {
-            txDetailMap.set(hash, data.result)
-          }
-        })
         
         const formattedTxs = txData.result.map((tx) => {
           const isToContract = tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase()

@@ -1,6 +1,6 @@
-# Mini-Lingua: Learn Languages, Earn CELO
+# LINGO: Learn Languages, Earn CELO
 
-A gamified language learning app on Celo Sepolia testnet. Complete lessons, earn XP, and claim CELO rewards!
+LINGO is a gamified language learning app on Celo Sepolia testnet. Complete lessons, earn XP, and claim CELO rewards!
 
 ## Features
 

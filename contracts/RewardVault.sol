@@ -6,7 +6,7 @@ import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 /**
  * @title RewardVault
- * @notice Holds CELO rewards for Mini-Lingua learners. Lesson completions earn up to 1 CELO,
+ * @notice Holds CELO rewards for LINGO learners. Lesson completions earn up to 1 CELO,
  *         module completions earn 10 CELO drops. Proofs are simple unique hashes that prevent
  *         double submissions without complex verification.
  */
