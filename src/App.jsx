@@ -1129,7 +1129,7 @@ function App() {
                       )}
                     </p>
                     <a
-                      href={`https://explorer.celo.org/tx/${tx.hash}`}
+                      href={`https://celo.blockscout.com/tx/${tx.hash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -2169,7 +2169,7 @@ function App() {
       // Only fetch cUSD token transfers to/from the vault contract
       // This ensures we only show transactions from the new contract deployment
       const tokenTxDataRaw = await fetchExplorerJson(
-        `https://explorer.celo.org/api?module=account&action=tokentx&contractaddress=${CUSD_MAINNET_ADDRESS}&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=50`,
+        `https://celo.blockscout.com/api?module=account&action=tokentx&contractaddress=${CUSD_MAINNET_ADDRESS}&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=50`,
         'tokentx'
       )
 
