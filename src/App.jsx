@@ -2,7 +2,8 @@ import { BrowserProvider, Contract, formatEther, id, parseEther } from 'ethers'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import {
-  CELO_SEPOLIA,
+  CELO_MAINNET,
+  CUSD_MAINNET_ADDRESS,
   LANGUAGES,
   LANGUAGE_LOCALES,
   LEVELS,
@@ -10,28 +11,28 @@ import {
   WEEKLY_QUESTS_DATA,
   buildDefaultLeaderboards,
 } from './content'
-import { REWARD_VAULT_ABI } from './abi/rewardVault'
+import { REWARD_VAULT_ABI, ERC20_ABI } from './abi/rewardVault'
 
-const LESSON_REWARD_CAP = 1
+const LESSON_REWARD_CAP = 0.1 // 0.1 cUSD cap
 const VAULT_ADDRESS = import.meta.env.VITE_REWARD_VAULT_ADDRESS || ''
 
-const formatCelo = (value = 0) => `${value.toFixed(2)} CELO`
+const formatCusd = (value = 0) => `${value.toFixed(3)} cUSD`
 const HERO_COPY = {
   home: {
     eyebrow: 'LINGO',
     tagline: 'Learn. Earn. Repeat.',
     title: 'Translate Languages Knowledge to Crypto Rewards',
-    subtitle: 'Earn CELO tokens and collect exclusive NFTs as I achieve language fluency. The blockchain-powered way to connect globally.',
+    subtitle: 'Earn cUSD tokens and collect exclusive NFTs as I achieve language fluency. The blockchain-powered way to connect globally.',
   },
   learn: {
     eyebrow: 'Learn & earn',
     title: 'Complete modules. Earn rewards.',
-    subtitle: 'Answer questions, gain XP, unlock CELO payouts and exclusive NFTs. Your progress, your rewards.',
+    subtitle: 'Answer questions, gain XP, unlock cUSD payouts and exclusive NFTs. Your progress, your rewards.',
   },
   rewards: {
     eyebrow: 'Rewards vault',
     title: 'Claim your earnings.',
-    subtitle: 'Convert XP to CELO rewards. Collect NFTs for milestones. Your incentivized learning journey pays off.',
+    subtitle: 'Convert XP to cUSD rewards. Collect NFTs for milestones. Your incentivized learning journey pays off.',
   },
   leaderboard: {
     eyebrow: 'Top learners',
@@ -497,7 +498,9 @@ function App() {
   const activeModuleLevel = lesson?.level ?? selectedLevel
   const computeRewardFromXp = (xpEarned) => {
     if (!xpEarned) return 0
-    return Math.min(LESSON_REWARD_CAP, xpEarned / 100)
+    // New formula: 0.1 cUSD cap, 1000 XP = 0.1 cUSD, so 1 XP = 0.001 cUSD
+    // Formula: min(0.1, xp / 1000)
+    return Math.min(LESSON_REWARD_CAP, xpEarned / 1000)
   }
   const rewardPreview = Number(computeRewardFromXp(lastRunXp || moduleSessionXp))
   
@@ -599,7 +602,7 @@ function App() {
         <h2>{lesson?.title ?? 'Module selected'}</h2>
         <p className="muted-line">
           {getLevelLabel(lesson?.level ?? selectedLevel)} · {lesson?.questions.length ?? 10} questions · Earn up to{' '}
-          {formatCelo(LESSON_REWARD_CAP)} CELO + XP
+          {formatCusd(LESSON_REWARD_CAP)} cUSD + XP
         </p>
       </div>
 
@@ -628,7 +631,7 @@ function App() {
         </div>
         <div>
           <p className="eyebrow">Loot</p>
-          <small>{lootDrop || 'Complete lessons to earn XP, CELO, and NFTs.'}</small>
+          <small>{lootDrop || 'Complete lessons to earn XP, cUSD, and NFTs.'}</small>
         </div>
       </div>
 
@@ -788,7 +791,7 @@ function App() {
                   <p className="eyebrow">{lesson.focus}</p>
                   <h2>{currentQuestion?.prompt}</h2>
                   <p className="lesson-meta">
-                    {lessonPosition}/{totalQuestions} · {lesson.difficulty} · Cap {formatCelo(LESSON_REWARD_CAP)}
+                    {lessonPosition}/{totalQuestions} · {lesson.difficulty} · Cap {formatCusd(LESSON_REWARD_CAP)}
                   </p>
                 </div>
                   <button
@@ -838,7 +841,7 @@ function App() {
                     {practiceMode
                       ? 'Practice run complete. XP stays the same.'
                       : lastRunXp
-                      ? `Module completed! +${lastRunXp} XP earned. Claim ${formatCelo(rewardPreview)} CELO reward.`
+                      ? `Module completed! +${lastRunXp} XP earned. Claim ${formatCusd(rewardPreview)} cUSD reward.`
                       : 'Module completed! Practice mode to refine your skills.'}
                   </p>
                   <div className="summary-actions">
@@ -849,7 +852,7 @@ function App() {
                         onClick={claimReward}
                         disabled={!claimableBalance || status === 'claiming'}
                       >
-                        Claim {formatCelo(claimableBalance)}
+                        Claim {formatCusd(claimableBalance)}
                       </button>
                     )}
                     {answers.length > 0 && (
@@ -864,7 +867,7 @@ function App() {
                       Practice run
                     </button>
                   </div>
-                  <p className="practice-hint">Practice mode helps you learn without earning rewards. Complete modules to earn XP, CELO, and NFTs.</p>
+                  <p className="practice-hint">Practice mode helps you learn without earning rewards. Complete modules to earn XP, cUSD, and NFTs.</p>
                 </div>
               ) : (
                 <p className="tip-line">{currentQuestion?.tip}</p>
@@ -887,8 +890,8 @@ function App() {
         <p className="eyebrow">Vault</p>
         <h3>
           {claimableBalance
-            ? `Ready to claim: ${formatCelo(claimableBalance)}`
-            : lootDrop || 'Complete language modules to earn XP, CELO rewards, and unlock NFTs'}
+            ? `Ready to claim: ${formatCusd(claimableBalance)}`
+            : lootDrop || 'Complete language modules to earn XP, cUSD rewards, and unlock NFTs'}
         </h3>
         {hasPending && (
           <p style={{ margin: '0.5rem 0', color: 'var(--accent)', fontSize: '0.9rem' }}>
@@ -904,7 +907,7 @@ function App() {
           {status === 'claiming' ? 'Signing…' : claimableBalance ? 'Claim now' : 'Keep learning'}
         </button>
         <small className="muted-line">
-          Earn XP and CELO rewards for every lesson. Unlock exclusive NFTs at milestones. {lootDrop || 'Start learning to earn rewards.'}
+          Earn XP and cUSD rewards for every lesson. Unlock exclusive NFTs at milestones. {lootDrop || 'Start learning to earn rewards.'}
         </small>
       </div>
 
@@ -935,7 +938,7 @@ function App() {
         <div className="countdown-chip">
           <span>Reset in {resetCountdown}</span>
         </div>
-        <p className="leaderboard-reward">Top 10 learners earn exclusive CELO rewards and NFT drops every week.</p>
+        <p className="leaderboard-reward">Top 10 learners earn exclusive cUSD rewards and NFT drops every week.</p>
         <div className="user-rank-chip">
           {userRankIndex >= 0 ? (
             <>
@@ -998,7 +1001,7 @@ function App() {
       <section id="wallet" className="single-screen-card wallet-screen">
         <div className="stat-card reward-card">
           <p className="eyebrow">Wallet Balance</p>
-          <h3>{formatCelo(walletBalance)}</h3>
+          <h3>{formatCusd(walletBalance)}</h3>
             {wallet.address && (
             <div className="connected-wallet-row">
             <button
@@ -1024,7 +1027,7 @@ function App() {
           )}
           <small className="muted-line">
             {wallet.address
-              ? `Network: ${wallet.type} · Celo Sepolia`
+              ? `Network: ${wallet.type} · Celo Mainnet`
               : 'Connect a wallet to view balances and history.'}
           </small>
           <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -1126,7 +1129,7 @@ function App() {
                       )}
                     </p>
                     <a
-                      href={`https://celo-sepolia.blockscout.com/tx/${tx.hash}`}
+                      href={`https://explorer.celo.org/tx/${tx.hash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
@@ -1141,7 +1144,7 @@ function App() {
                     </a>
                   </div>
                   <span style={{ fontSize: '1rem', fontWeight: 600, color: tx.type === 'received' ? '#00c48c' : '#fefefe' }}>
-                    {tx.type === 'received' ? '+' : '-'}{formatCelo(tx.value)}
+                    {tx.type === 'received' ? '+' : '-'}{formatCusd(tx.value)}
                   </span>
                 </div>
               ))}
@@ -1487,35 +1490,35 @@ function App() {
   const ensureCeloChain = async (activeProvider) => {
     try {
       const currentChain = await activeProvider.request({ method: 'eth_chainId' })
-      if (currentChain === CELO_SEPOLIA.chainId || currentChain === '0xaa044c') {
-        return CELO_SEPOLIA.chainId
+      if (currentChain === CELO_MAINNET.chainId || currentChain === '0xa4ec') {
+        return CELO_MAINNET.chainId
       }
       
       // Try to switch chain
       try {
         await activeProvider.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: CELO_SEPOLIA.chainId }],
+          params: [{ chainId: CELO_MAINNET.chainId }],
         })
         // Wait a bit for chain switch to complete
         await new Promise((resolve) => setTimeout(resolve, 500))
-        return CELO_SEPOLIA.chainId
+        return CELO_MAINNET.chainId
       } catch (switchError) {
         // Chain doesn't exist, add it
         if (switchError.code === 4902 || switchError.code === -32603 || switchError.message?.includes('not added')) {
           await activeProvider.request({
             method: 'wallet_addEthereumChain',
-            params: [CELO_SEPOLIA],
+            params: [CELO_MAINNET],
           })
           // Wait for chain addition
           await new Promise((resolve) => setTimeout(resolve, 500))
-          return CELO_SEPOLIA.chainId
+          return CELO_MAINNET.chainId
         }
         throw switchError
       }
     } catch (error) {
       console.error('Chain switch error:', error)
-      throw new Error(`Failed to switch to Celo Sepolia: ${error.message || 'Unknown error'}`)
+      throw new Error(`Failed to switch to Celo Mainnet: ${error.message || 'Unknown error'}`)
     }
   }
 
@@ -1567,7 +1570,7 @@ function App() {
         throw new Error('No accounts found. Please unlock your wallet.')
       }
 
-      // Ensure we're on Celo Sepolia
+      // Ensure we're on Celo Mainnet
       const chainId = await ensureCeloChain(eipProvider)
 
       // Determine wallet type if not already set
@@ -1615,7 +1618,7 @@ function App() {
           try {
             const info = await contract.learners(accounts[0])
             setClaimableOnChain(Number(formatEther(info.claimable)))
-            console.log('Contract initialized for', walletType, '- Balance:', Number(formatEther(info.claimable)), 'CELO')
+            console.log('Contract initialized for', walletType, '- Balance:', Number(formatEther(info.claimable)), 'cUSD')
           } catch (err) {
             console.warn('Could not fetch initial balance (non-critical):', err)
             setClaimableOnChain(0)
@@ -1641,8 +1644,8 @@ function App() {
       // User-friendly error messages
       if (errorMessage.includes('User rejected') || errorMessage.includes('denied')) {
         showToast('Connection cancelled by user')
-      } else if (errorMessage.includes('chain')) {
-        showToast('Failed to switch to Celo Sepolia network')
+      } else       if (errorMessage.includes('chain')) {
+        showToast('Failed to switch to Celo Mainnet network')
       } else {
         showToast(errorMessage)
       }
@@ -1855,7 +1858,7 @@ function App() {
     const hasRewardsToProcess = xpPayload.length > 0 || claimableOnChain > 0
 
     if (!hasRewardsToProcess) {
-      showToast('Complete language modules to earn XP and CELO rewards.')
+      showToast('Complete language modules to earn XP and cUSD rewards.')
       return
     }
     if (!wallet.address) {
@@ -1931,7 +1934,7 @@ function App() {
           if (activeView === 'wallet') {
             await fetchTransactions()
           }
-          showToast(`Success! ${formatCelo(expectedPayout)} sent to your ${wallet.type} wallet.`)
+          showToast(`Success! ${formatCusd(expectedPayout)} sent to your ${wallet.type} wallet.`)
           console.log('=== CLAIM COMPLETE ===')
           return 'success'
         } catch (error) {
@@ -1978,49 +1981,51 @@ function App() {
       console.log('Current claimable balance from contract:', currentClaimable, 'CELO')
       
       if (currentClaimable <= 0) {
-        showToast('No rewards available. Complete more modules to earn XP and CELO.')
+        showToast('No rewards available. Complete more modules to earn XP and cUSD.')
         setClaimableOnChain(0)
         return
       }
       
-      const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
-      const contractBalanceCELO = Number(formatEther(contractBalance))
-      console.log('Contract CELO balance:', contractBalanceCELO, 'CELO')
-      
-      const walletBalanceBefore = await browserProvider.getBalance(wallet.address)
-      const walletBalanceBeforeCELO = Number(formatEther(walletBalanceBefore))
-      console.log('Wallet balance before claim:', walletBalanceBeforeCELO, 'CELO')
-      
-      const claimableAmount = Math.min(currentClaimable, contractBalanceCELO)
-      
-      if (claimableAmount <= 0) {
-        showToast('No rewards available to claim.')
-        setClaimableOnChain(currentClaimable)
-        return
-      }
-      
-      if (contractBalanceCELO < currentClaimable) {
-        const shortfall = currentClaimable - contractBalanceCELO
-        showToast(
-          `Claiming ${formatCelo(claimableAmount)} (contract has ${contractBalanceCELO.toFixed(
-            2
-          )} CELO, you have ${currentClaimable.toFixed(2)} claimable). Fund contract with ${shortfall.toFixed(
-            2
-          )} more CELO to claim full amount.`
-        )
-      } else {
-        showToast(`Claiming ${formatCelo(claimableAmount)}...`)
-      }
-      
-      let tx
-      if (contractBalanceCELO >= currentClaimable) {
-        console.log('Calling claimAll() to send', currentClaimable, 'CELO to wallet...')
+          // Check cUSD balance of contract
+          const cusdContract = new Contract(CUSD_MAINNET_ADDRESS, ERC20_ABI, browserProvider)
+          const contractBalance = await cusdContract.balanceOf(VAULT_ADDRESS)
+          const contractBalanceCusd = Number(formatEther(contractBalance))
+          console.log('Contract cUSD balance:', contractBalanceCusd, 'cUSD')
+          
+          const walletBalanceBefore = await cusdContract.balanceOf(wallet.address)
+          const walletBalanceBeforeCusd = Number(formatEther(walletBalanceBefore))
+          console.log('Wallet cUSD balance before claim:', walletBalanceBeforeCusd, 'cUSD')
+          
+          const claimableAmount = Math.min(currentClaimable, contractBalanceCusd)
+          
+          if (claimableAmount <= 0) {
+            showToast('No rewards available to claim.')
+            setClaimableOnChain(currentClaimable)
+            return
+          }
+          
+          if (contractBalanceCusd < currentClaimable) {
+            const shortfall = currentClaimable - contractBalanceCusd
+            showToast(
+              `Claiming ${formatCusd(claimableAmount)} (contract has ${contractBalanceCusd.toFixed(
+                3
+              )} cUSD, you have ${currentClaimable.toFixed(3)} claimable). Fund contract with ${shortfall.toFixed(
+                3
+              )} more cUSD to claim full amount.`
+            )
+          } else {
+            showToast(`Claiming ${formatCusd(claimableAmount)}...`)
+          }
+          
+          let tx
+          if (contractBalanceCusd >= currentClaimable) {
+            console.log('Calling claimAll() to send', currentClaimable, 'cUSD to wallet...')
             tx = await contract.claimAll({ gasLimit: 150000 })
-      } else {
-        const amountWei = parseEther(claimableAmount.toFixed(6))
-        console.log('Calling claim() to send', claimableAmount, 'CELO to wallet (limited by contract balance)...')
+          } else {
+            const amountWei = parseEther(claimableAmount.toFixed(6))
+            console.log('Calling claim() to send', claimableAmount, 'cUSD to wallet (limited by contract balance)...')
             tx = await contract.claim(amountWei, { gasLimit: 150000 })
-      }
+          }
       console.log('Claim transaction sent:', tx.hash)
       
       showToast('Transaction submitted. Waiting for confirmation...')
@@ -2033,15 +2038,15 @@ function App() {
       
       await new Promise((resolve) => setTimeout(resolve, 3000))
       
-      const walletBalanceAfter = await browserProvider.getBalance(wallet.address)
-      const walletBalanceAfterCELO = Number(formatEther(walletBalanceAfter))
-      const received = walletBalanceAfterCELO - walletBalanceBeforeCELO
-      console.log('Wallet balance after claim:', walletBalanceAfterCELO, 'CELO')
-      console.log('CELO received:', received, 'CELO')
+      const walletBalanceAfter = await cusdContract.balanceOf(wallet.address)
+      const walletBalanceAfterCusd = Number(formatEther(walletBalanceAfter))
+      const received = walletBalanceAfterCusd - walletBalanceBeforeCusd
+      console.log('Wallet cUSD balance after claim:', walletBalanceAfterCusd, 'cUSD')
+      console.log('cUSD received:', received, 'cUSD')
       
       const updatedInfo = await contract.learners(wallet.address)
       const updatedClaimable = Number(formatEther(updatedInfo.claimable))
-      console.log('Claimable balance after claim:', updatedClaimable, 'CELO (should be 0)')
+      console.log('Claimable balance after claim:', updatedClaimable, 'cUSD (should be 0)')
       
       setClaimableOnChain(updatedClaimable)
       
@@ -2051,10 +2056,10 @@ function App() {
         const finalInfo = await contract.learners(wallet.address)
         const finalClaimable = Number(formatEther(finalInfo.claimable))
         setClaimableOnChain(finalClaimable)
-        console.log('Final claimable balance:', finalClaimable, 'CELO')
+        console.log('Final claimable balance:', finalClaimable, 'cUSD')
       }
       
-      showToast(`Success! ${formatCelo(claimableAmount)} sent to your ${wallet.type} wallet.`)
+      showToast(`Success! ${formatCusd(claimableAmount)} sent to your ${wallet.type} wallet.`)
       
       setLastRunXp(0)
       
@@ -2078,10 +2083,11 @@ function App() {
       ) {
         try {
           if (browserProvider) {
-          const contractBalance = await browserProvider.getBalance(VAULT_ADDRESS)
-          const contractBalanceCELO = Number(formatEther(contractBalance))
-            if (contractBalanceCELO < (expectedPayout || claimableOnChain)) {
-            showToast(`Contract needs funding! Send CELO to: ${VAULT_ADDRESS}`)
+            const cusdContract = new Contract(CUSD_MAINNET_ADDRESS, ERC20_ABI, browserProvider)
+            const contractBalance = await cusdContract.balanceOf(VAULT_ADDRESS)
+            const contractBalanceCusd = Number(formatEther(contractBalance))
+            if (contractBalanceCusd < (expectedPayout || claimableOnChain)) {
+            showToast(`Contract needs funding! Send cUSD to vault using fund() function`)
             } else {
               showToast('Insufficient claimable balance or contract funds')
             }
@@ -2102,7 +2108,7 @@ function App() {
           }
         }
       } else if (errorMsg.includes('gas') || errorMsg.includes('funds') || errorMsg.includes('balance')) {
-        showToast('Insufficient funds for gas. Please add CELO to your wallet.')
+        showToast('Insufficient funds for gas. Please add CELO to your wallet for gas fees.')
       } else {
         showToast(`Claim failed: ${errorMsg}`)
       }
@@ -2121,7 +2127,7 @@ function App() {
       // Only update if we got a valid response
       if (!isNaN(claimable) && claimable >= 0) {
         setClaimableOnChain(claimable)
-        console.log('Refreshed claimable balance:', claimable, 'CELO')
+        console.log('Refreshed claimable balance:', claimable, 'cUSD')
       }
     } catch (error) {
       console.error('Error refreshing claimable balance:', error)
@@ -2132,11 +2138,14 @@ function App() {
     if (!provider || !wallet.address) return
     try {
       const browserProvider = new BrowserProvider(provider)
-      const balance = await browserProvider.getBalance(wallet.address)
-      const balanceCELO = Number(formatEther(balance))
-      setWalletBalance(balanceCELO)
+      // Fetch cUSD balance instead of native CELO
+      const cusdContract = new Contract(CUSD_MAINNET_ADDRESS, ERC20_ABI, browserProvider)
+      const balance = await cusdContract.balanceOf(wallet.address)
+      const balanceCusd = Number(formatEther(balance))
+      setWalletBalance(balanceCusd)
     } catch (error) {
-      console.error('Error fetching wallet balance:', error)
+      console.error('Error fetching cUSD balance:', error)
+      setWalletBalance(0)
     }
   }
 
@@ -2144,7 +2153,7 @@ function App() {
     if (!VAULT_ADDRESS) return
     setLoadingTransactions(true)
     try {
-      const fetchBlockscoutJson = async (url, label) => {
+      const fetchExplorerJson = async (url, label) => {
         try {
           const response = await fetch(url)
           if (!response.ok) {
@@ -2152,119 +2161,58 @@ function App() {
           }
           return await response.json()
         } catch (error) {
-          console.warn(`Blockscout ${label ?? 'request'} failed`, { url, error })
+          console.warn(`Explorer ${label ?? 'request'} failed`, { url, error })
           return null
         }
       }
 
-      // Fetch regular transactions, internal transactions, and token transfers
-      const [txDataRaw, internalTxDataRaw, tokenTxDataRaw] = await Promise.all([
-        fetchBlockscoutJson(
-          `https://celo-sepolia.blockscout.com/api?module=account&action=txlist&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
-          'txlist'
-        ),
-        fetchBlockscoutJson(
-          `https://celo-sepolia.blockscout.com/api?module=account&action=txlistinternal&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
-          'txlistinternal'
-        ),
-        fetchBlockscoutJson(
-          `https://celo-sepolia.blockscout.com/api?module=account&action=tokentx&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=20`,
-          'tokentx'
-        ),
-      ])
+      // Only fetch cUSD token transfers to/from the vault contract
+      // This ensures we only show transactions from the new contract deployment
+      const tokenTxDataRaw = await fetchExplorerJson(
+        `https://explorer.celo.org/api?module=account&action=tokentx&contractaddress=${CUSD_MAINNET_ADDRESS}&address=${VAULT_ADDRESS}&sort=desc&page=1&offset=50`,
+        'tokentx'
+      )
 
-      const txData = txDataRaw ?? { status: '0', result: [] }
-      const internalTxData = internalTxDataRaw ?? { status: '0', result: [] }
       const tokenTxData = tokenTxDataRaw ?? { status: '0', result: [] }
       
-      // Create a map of internal transactions by hash
-      const internalTxMap = new Map()
-      if (internalTxData.status === '1' && internalTxData.result && Array.isArray(internalTxData.result)) {
-        internalTxData.result.forEach((internalTx) => {
-          const hash = internalTx.hash || internalTx.transactionHash || internalTx.parentHash
-          if (hash) {
-            if (!internalTxMap.has(hash)) {
-              internalTxMap.set(hash, [])
-            }
-            internalTxMap.get(hash).push(internalTx)
-          }
-        })
-      }
-      
-      // Create a map of token transfers (CELO native transfers) by hash
-      const tokenTxMap = new Map()
+      // Process only cUSD token transfers involving the vault contract
+      // This ensures we only show transactions from the current contract deployment
       if (tokenTxData.status === '1' && tokenTxData.result && Array.isArray(tokenTxData.result)) {
-        tokenTxData.result.forEach((tokenTx) => {
-          const hash = tokenTx.hash || tokenTx.transactionHash
-          if (hash) {
-            if (!tokenTxMap.has(hash)) {
-              tokenTxMap.set(hash, [])
+        const formattedTxs = tokenTxData.result
+          .filter((tx) => {
+            // Only include transactions where vault is sender or receiver
+            const vaultAddr = VAULT_ADDRESS.toLowerCase()
+            const from = (tx.from || '').toLowerCase()
+            const to = (tx.to || '').toLowerCase()
+            return from === vaultAddr || to === vaultAddr
+          })
+          .map((tx) => {
+            const vaultAddr = VAULT_ADDRESS.toLowerCase()
+            const from = (tx.from || '').toLowerCase()
+            const to = (tx.to || '').toLowerCase()
+            const isFromContract = from === vaultAddr
+            const isToContract = to === vaultAddr
+            const involvesUserWallet = wallet.address && (
+              from === wallet.address.toLowerCase() || 
+              to === wallet.address.toLowerCase()
+            )
+            
+            // Token transfer value (already in wei, need to format)
+            const value = tx.value || '0'
+            const actualValue = Number(formatEther(value))
+            
+            return {
+              hash: tx.hash || tx.transactionHash,
+              from: tx.from,
+              to: tx.to,
+              value: actualValue,
+              timestamp: parseInt(tx.timeStamp || '0', 10) * 1000,
+              status: tx.txreceipt_status === '1' || tx.txreceipt_status === '0x1' ? 'success' : 'failed',
+              type: isToContract ? 'received' : isFromContract ? 'sent' : 'unknown',
+              involvesUserWallet,
             }
-            tokenTxMap.get(hash).push(tokenTx)
-          }
-        })
-      }
-      
-      if (txData.status === '1' && txData.result && Array.isArray(txData.result)) {
-        const txDetailMap = new Map()
-        
-        const formattedTxs = txData.result.map((tx) => {
-          const isToContract = tx.to?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
-          const isFromContract = tx.from?.toLowerCase() === VAULT_ADDRESS.toLowerCase()
-          const involvesUserWallet = wallet.address && (
-            tx.from?.toLowerCase() === wallet.address.toLowerCase() || 
-            tx.to?.toLowerCase() === wallet.address.toLowerCase()
-          )
-          
-          // Start with the main transaction value
-          let actualValue = Number(formatEther(tx.value || '0'))
-          
-          // Check internal transactions for this hash
-          const internalTxs = internalTxMap.get(tx.hash)
-          if (internalTxs && internalTxs.length > 0) {
-            internalTxs.forEach((itx) => {
-                const itxValue = Number(formatEther(itx.value || '0'))
-                const itxFrom = (itx.from || '').toLowerCase()
-                const itxTo = (itx.to || '').toLowerCase()
-              const contractAddr = VAULT_ADDRESS.toLowerCase()
-                
-              // Contract sending CELO (claim)
-              if (itxFrom === contractAddr && itxValue > 0) {
-                  actualValue = Math.max(actualValue, itxValue)
-                }
-              // Contract receiving CELO (funding)
-              if (itxTo === contractAddr && itxValue > 0) {
-                  actualValue = Math.max(actualValue, itxValue)
-              }
-            })
-          }
-          
-          // Check transaction detail if we fetched it
-          const txDetail = txDetailMap.get(tx.hash)
-          if (txDetail && txDetail.value) {
-            const detailValue = Number(formatEther(txDetail.value))
-            if (detailValue > 0) {
-              actualValue = Math.max(actualValue, detailValue)
-            }
-          }
-          
-          // Use main transaction value if available
-          if (tx.value && tx.value !== '0') {
-              const mainTxValue = Number(formatEther(tx.value))
-              actualValue = Math.max(actualValue, mainTxValue)
-          }
-          
-          return {
-            hash: tx.hash,
-            from: tx.from,
-            to: tx.to,
-            value: actualValue,
-            timestamp: parseInt(tx.timeStamp || '0', 10) * 1000,
-            status: tx.txreceipt_status === '1' ? 'success' : 'failed',
-            type: isToContract ? 'received' : isFromContract ? 'sent' : 'unknown',
-            involvesUserWallet,
-          }
-        })
+          })
+          .sort((a, b) => b.timestamp - a.timestamp) // Sort by newest first
         
         setTransactions(formattedTxs)
       } else {

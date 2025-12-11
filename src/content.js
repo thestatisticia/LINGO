@@ -1,3 +1,11 @@
+export const CELO_MAINNET = {
+  chainId: '0xa4ec', // 42220
+  chainName: 'Celo Mainnet',
+  rpcUrls: ['https://forno.celo.org'],
+  nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
+  blockExplorerUrls: ['https://explorer.celo.org', 'https://celoscan.io'],
+}
+
 export const CELO_SEPOLIA = {
   chainId: '0xaa044c', // 11142220
   chainName: 'Celo Sepolia',
@@ -5,6 +13,9 @@ export const CELO_SEPOLIA = {
   nativeCurrency: { name: 'CELO', symbol: 'CELO', decimals: 18 },
   blockExplorerUrls: ['https://celo-sepolia.blockscout.com'],
 }
+
+// cUSD Mainnet contract address
+export const CUSD_MAINNET_ADDRESS = '0x765DE816845861e75A25fCA122bb6898B8B1282a'
 
 export const LEVELS = [
   { id: 'beginner', label: 'Beginner', description: 'First words & sounds', xpMultiplier: 1 },

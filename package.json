@@ -10,12 +10,14 @@
     "preview": "vite preview",
     "contracts:compile": "hardhat compile",
     "contracts:test": "hardhat test",
-    "contracts:deploy": "hardhat run scripts/deploy.js --network celoSepolia"
+    "contracts:deploy": "hardhat run scripts/deploy.js --network celoSepolia",
+    "contracts:deploy:mainnet": "hardhat run scripts/deploy.js --network celoMainnet"
   },
   "dependencies": {
     "ethers": "^6.13.2",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "viem": "^2.41.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

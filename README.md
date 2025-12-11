@@ -12,8 +12,8 @@ LINGO is a gamified language learning app on Celo Sepolia testnet. Complete less
 
 ## Smart Contract
 
-**Deployed Contract Address**: `0x564Eb897eAc86Cd3cf9E135d3d0eA6FD41cA846f`  
-**Network**: Celo Sepolia (Chain ID: 11142220)
+**Deployed Contract Address**: `0x1ccDFEa9bafE07264285db936aC87D26Cc5fDA8a`  
+**Network**: Celo Mainnet (Chain ID: 42220)
 
 ### Contract Functions
 - `submitLesson(uint256 xpGained, bytes32 proofId)` - Record lesson completion (max 1 CELO)
@@ -33,7 +33,7 @@ npm install
 Create a `.env` file in the root directory:
 
 ```env
-VITE_REWARD_VAULT_ADDRESS=0x564Eb897eAc86Cd3cf9E135d3d0eA6FD41cA846f
+VITE_REWARD_VAULT_ADDRESS=0x1ccDFEa9bafE07264285db936aC87D26Cc5fDA8a
 ```
 
 ### 3. Run Development Server
